@@ -72,4 +72,27 @@ if not df.empty:
     latest = df.iloc[-1]
     c1, c2, c3 = st.columns(3)
     c1.metric("최근 파워", f"{latest[power_col]} W")
-    c2.metric("디
+    c2.metric("디커플링 (앱 계산)", f"{latest[dec_col]} %")
+    
+    # 검증 로직
+    if "수동기입값" in latest and latest["수동기입값"] > 0:
+        diff = abs(latest[dec_col] - latest["수동기입값"])
+        c3.metric("데이터 검증", "✅ 일치" if diff < 0.2 else "⚠️ 확인필요", delta=f"오차 {diff:.2f}%")
+
+    # 심박수 추이 그래프
+    if hr_data_col in latest and pd.notna(latest[hr_data_col]):
+        try:
+            hrs = [float(x) for x in str(latest[hr_data_col]).split(",")]
+            times = [i*5 for i in range(len(hrs))]
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=times, y=hrs, mode='lines+markers', name="Heart Rate", line=dict(color='#00dfd8')))
+            fig.add_vline(x=max(times)/2, line_dash="dash", line_color="yellow", annotation_text="분석 분기점")
+            fig.update_layout(template="plotly_dark", title="세션 내 심박수 변화 (Cardiac Drift 추적)", xaxis_title="시간(분)", yaxis_title="BPM")
+            st.plotly_chart(fig, use_container_width=True)
+        except:
+            pass
+
+    st.divider()
+    with st.expander("📊 전체 히스토리 데이터"):
+        st.dataframe(df.sort_values(by=session_col, ascending=False))
