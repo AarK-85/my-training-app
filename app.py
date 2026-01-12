@@ -58,7 +58,6 @@ with st.sidebar:
         hr_inputs = []
         h_cols = st.columns(3)
         for i in range(total_steps):
-            # 기존 데이터 파싱 시 소수점 제거 후 정수화
             try:
                 def_hr = int(float(existing_hrs[i].strip())) if i < len(existing_hrs) else 130
             except:
@@ -69,7 +68,7 @@ with st.sidebar:
                 hr_inputs.append(str(int(hr_val)))
         
         if st.form_submit_button(btn_label):
-            # 디커플링 계산 (본훈련 구간)
+            # 디커플링 계산
             main_hrs = [int(x) for x in hr_inputs[2:-1]]
             mid = len(main_hrs) // 2
             f_ef_val = f_mp / np.mean(main_hrs[:mid])
@@ -109,7 +108,7 @@ if not df.empty and s_data is not None:
     elif current_dec <= 8.0 and max_hr < 170:
         headline = f"✅ **엔진 확장 가능성이 높습니다.** 디커플링({current_dec}%)이 소폭 있으나 최대심박({max_hr}bpm)이 잘 통제되고 있습니다. 다음 세션은 {current_p + 5}W 도전을 추천합니다!"
     else:
-        headline = f"⏳ **현재 구간 적응이 더 필요합니다.** 심박 표류({current_dec}%)가 관찰되니, {current_p}W를 반복하여 제어력을 완벽히 확보합시다."
+        headline = f"⏳ **현재 구간 적응이 더 필요합니다.** 심박 표류({current_dec}%)가 관찰되니, {current_p}W를 반복하여 제어력을 확보합시다."
     st.info(headline)
     st.divider()
 
@@ -135,8 +134,10 @@ if not df.empty and s_data is not None:
     fig1.add_vrect(x0=m_end_time, x1=time_array[-1], fillcolor="gray", opacity=0.1, annotation_text="CD")
     fig1.update_layout(template="plotly_dark", height=500, hovermode="x unified")
     st.plotly_chart(fig1, use_container_width=True)
+    st.caption("**💡 그래프 해석:** 파란색 면적은 목표 파워(W)이며, 빨간색 선은 심박수(BPM)의 변화입니다. 본 훈련 구간에서 심박수 선이 파워 면적과 평행을 유지할수록 유산소 기초가 탄탄함을 의미합니다.")
 
     # --- [섹션 3] Cardiac Drift 분석 ---
+    st.divider()
     st.subheader("🎯 Cardiac Drift 시각적 분석 (전반 vs 후반)")
     main_hrs = hr_array[2:-1]
     mid = len(main_hrs) // 2
@@ -152,6 +153,7 @@ if not df.empty and s_data is not None:
     with colb:
         drift_val = np.mean(s_half) - np.mean(f_half)
         st.metric("심박 상승 폭", f"+{drift_val:.1f} bpm", delta=f"{current_dec}%", delta_color="inverse")
+    st.caption(f"**🎯 Cardiac Drift(심박 표류):** 동일한 {int(mp)}W 파워를 유지할 때, 전반부 대비 후반부 심박수가 얼마나 상승했는지 비교합니다. 디커플링 수치가 **5% 이내**라면 해당 파워는 사용자님의 완벽한 'Zone 2' 영역에 들어온 것입니다.")
 
     # --- [섹션 4] 장기 지표 (EF & HRR) ---
     st.divider()
@@ -166,6 +168,7 @@ if not df.empty and s_data is not None:
         fig3 = go.Figure(go.Scatter(x=t_df['회차'], y=t_df['EF'], mode='lines+markers', line=dict(color='springgreen', width=3)))
         fig3.update_layout(template="plotly_dark", height=350, xaxis=dict(dtick=1))
         st.plotly_chart(fig3, use_container_width=True)
+        st.info("**📈 EF(Efficiency Factor):** 유산소 효율 지수입니다. [파워 ÷ 평균 심박]으로 계산하며, 수치가 높을수록 '더 낮은 심박으로 더 높은 파워'를 내고 있다는 성장의 증거입니다.")
     with c2:
         st.subheader("💓 심박 회복력 (HRR)")
         def calc_hrr_func(row):
@@ -176,3 +179,4 @@ if not df.empty and s_data is not None:
         fig4 = go.Figure(go.Bar(x=h_df['회차'], y=h_df['HRR'], marker_color='orange'))
         fig4.update_layout(template="plotly_dark", height=350, xaxis=dict(dtick=1))
         st.plotly_chart(fig4, use_container_width=True)
+        st.info("**💓 HRR(Heart Rate Recovery):** 본 훈련 종료 후 5분간 떨어진 심박수입니다. 이 막대가 높을수록 심장 근육의 회복 능력이 뛰어나며, 유산소 엔진이 강력해졌음을 의미합니다.")
