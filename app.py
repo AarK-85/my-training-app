@@ -263,3 +263,65 @@ if not df.empty:
     c1.metric("현재 EF", f"{current_ef:.2f}")
     c2.metric("초기 대비 개선율", f"{improvement:+.1f}%")
     c3.write(f"**AI 코치 분석:** {'엔진 효율이 상승 중입니다! 파워 상향을 고려해 보세요.' if improvement > 5 else '기초 유산소 다지기 단계입니다.'}")
+
+# (앞부분 EF 추이 로직 하단에 추가)
+
+st.divider()
+st.subheader("💓 심박 회복력 (HR Recovery) 분석")
+
+if not df.empty:
+    def calculate_hrr(row):
+        try:
+            hrs = [float(x.strip()) for x in str(row['전체심박데이터']).split(",")]
+            # 본 훈련 종료 직전 심박 (마지막에서 두 번째 점)
+            main_end_hr = hrs[-2]
+            # 쿨다운 5분 후 심박 (마지막 점)
+            cd_5min_hr = hrs[-1]
+            return main_end_hr - cd_5min_hr
+        except:
+            return np.nan
+
+    # HRR 계산 및 데이터프레임 적용
+    hrr_df = df.copy()
+    hrr_df['HRR'] = hrr_df.apply(calculate_hrr, axis=1)
+    
+    # HRR 추이 그래프
+    fig4 = go.Figure()
+    
+    # HRR 바 차트 (회복량은 높을수록 좋음)
+    fig4.add_trace(go.Bar(
+        x=hrr_df['회차'], 
+        y=hrr_df['HRR'],
+        name='HR Recovery (1min/5min)',
+        marker_color='rgba(255, 165, 0, 0.7)',
+        text=hrr_df['HRR'].astype(int),
+        textposition='outside'
+    ))
+
+    # 목표선 (보통 20~30 이상이면 우수)
+    fig4.add_hline(y=20, line_dash="dot", line_color="rgba(255, 255, 255, 0.5)", annotation_text="Good Recovery")
+
+    fig4.update_layout(
+        template="plotly_dark",
+        height=400,
+        xaxis_title="훈련 회차 (Session)",
+        yaxis_title="심박 하강 폭 (BPM)",
+        hovermode="x unified"
+    )
+    
+    st.plotly_chart(fig4, use_container_width=True)
+
+    # HRR 분석 코멘트
+    latest_hrr = hrr_df['HRR'].iloc[-1]
+    avg_hrr = hrr_df['HRR'].mean()
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric("최근 세션 회복량", f"{latest_hrr:.0f} BPM")
+    with c2:
+        if latest_hrr > avg_hrr:
+            st.success(f"평균({avg_hrr:.1f})보다 회복 속도가 빠릅니다! 심장 근육이 강화되고 있습니다.")
+        else:
+            st.warning(f"누적 피로도가 있을 수 있습니다. 충분한 휴식을 고려하세요.")
+
+    st.caption("※ HRR(Heart Rate Recovery): 본 훈련 종료 직후부터 5분간 심박수가 얼마나 떨어졌는지를 측정합니다. 수치가 높을수록 유산소 기초 체력이 우수함을 의미합니다.")
