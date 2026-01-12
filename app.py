@@ -106,3 +106,160 @@ if not df.empty and s_data is not None:
     
     st.plotly_chart(fig, use_container_width=True)
     st.info(f"💡 105분 시점 최종 심박수: **{hr_array[-1]} BPM** / 디커플링: **{s_data['디커플링(%)']}%**")
+
+import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+
+# 4. 메인 분석 대시보드
+if not df.empty and s_data is not None:
+    st.title(f"📊 Session {selected_session} 정밀 분석")
+    
+    # 데이터 파싱
+    hr_array = [float(x.strip()) for x in str(s_data['전체심박데이터']).split(",")]
+    time_array = [i*5 for i in range(len(hr_array))]
+    wp, mp, cp = s_data['웜업파워'], s_data['본훈련파워'], s_data['쿨다운파워']
+    
+    # 1️⃣ 첫 번째 그래프: 전체 시퀀스 (이미 구현된 스텝 파워 그래프)
+    # (중략 - 이전 코드의 fig1 로직)
+
+    st.divider()
+
+    # 2️⃣ 두 번째 그래프: Cardiac Drift 시각화 (Power/HR Correlation)
+    st.subheader("🎯 Cardiac Drift 시각적 분석 (전반 vs 후반)")
+    
+    # 본 훈련 데이터만 추출 (웜업 2개, 쿨다운 1개 제외)
+    main_hrs = hr_array[2:-1]
+    main_times = time_array[2:-1]
+    mid_point = len(main_hrs) // 2
+    
+    first_half_hr = main_hrs[:mid_point]
+    second_half_hr = main_hrs[mid_point:]
+    
+    # 시각적 비교를 위한 Scatter + Trendline 그래프
+    fig2 = go.Figure()
+
+    # 전반부 데이터 (파란색)
+    fig2.add_trace(go.Scatter(
+        x=list(range(len(first_half_hr))), 
+        y=first_half_hr,
+        mode='lines+markers',
+        name='1st Half HR (Stability)',
+        line=dict(color='#00dfd8', width=2),
+        marker=dict(size=8)
+    ))
+
+    # 후반부 데이터 (빨간색)
+    fig2.add_trace(go.Scatter(
+        x=list(range(len(second_half_hr))), 
+        y=second_half_hr,
+        mode='lines+markers',
+        name='2nd Half HR (Drift)',
+        line=dict(color='#ff4b4b', width=2),
+        marker=dict(size=8)
+    ))
+
+    # 드리프트 영역 채우기 (두 라인 사이의 간격이 곧 피로도와 효율 저하를 의미)
+    fig2.add_trace(go.Scatter(
+        x=list(range(len(second_half_hr))),
+        y=second_half_hr,
+        fill='tonexty',
+        fillcolor='rgba(255, 75, 75, 0.1)',
+        line=dict(width=0),
+        name='Drift Area',
+        showlegend=False
+    ))
+
+    fig2.update_layout(
+        template="plotly_dark",
+        title=f"동일 파워({mp}W)에서의 심박수 변화 비교",
+        xaxis_title="구간 내 경과 시간 (5분 단위)",
+        yaxis_title="Heart Rate (BPM)",
+        height=450,
+        hovermode="x unified"
+    )
+    
+    col_a, col_b = st.columns([2, 1])
+    with col_a:
+        st.plotly_chart(fig2, use_container_width=True)
+    with col_b:
+        # 수치 기반 요약
+        f_avg = np.mean(first_half_hr)
+        s_avg = np.mean(second_half_hr)
+        drift_bpm = s_avg - f_avg
+        
+        st.write("### 📈 Drift 리포트")
+        st.metric("전반부 평균 심박", f"{f_avg:.1f} bpm")
+        st.metric("후반부 평균 심박", f"{s_avg:.1f} bpm")
+        st.metric("심박 상승 폭", f"+{drift_bpm:.1f} bpm", delta=f"{s_data['디커플링(%)']}%", delta_color="inverse")
+        
+        if s_data['디커플링(%)'] > 5.0:
+            st.error("🚨 디커플링이 5%를 초과했습니다. 유산소 베이스 보강이 필요합니다.")
+        else:
+            st.success("✅ 유산소 엔진이 안정적입니다. 다음 단계로 나아갈 준비가 되었습니다.")
+
+# 5. 전체 효율성(EF) 추이 분석
+st.divider()
+st.subheader("📈 유산소 효율성(EF) 장기 추이")
+
+if not df.empty:
+    # EF 계산 (본훈련파워 / 본훈련평균심박)
+    # 전체 심박 데이터에서 본훈련 구간만 추출하여 평균 계산
+    def calculate_main_hr_avg(row):
+        try:
+            hrs = [float(x.strip()) for x in str(row['전체심박데이터']).split(",")]
+            main_hrs = hrs[2:-1] # 웜업2, 쿨다운1 제외
+            return np.mean(main_hrs)
+        except:
+            return np.nan
+
+    # 추이 분석용 임시 데이터프레임 생성
+    trend_df = df.copy()
+    trend_df['본훈련평균심박'] = trend_df.apply(calculate_main_hr_avg, axis=1)
+    trend_df['EF'] = trend_df['본훈련파워'] / trend_df['본훈련평균심박']
+    
+    # EF 추이 그래프
+    fig3 = go.Figure()
+    
+    # EF 라인
+    fig3.add_trace(go.Scatter(
+        x=trend_df['회차'], 
+        y=trend_df['EF'],
+        mode='lines+markers',
+        name='Efficiency Factor (EF)',
+        line=dict(color='#00df8a', width=3),
+        marker=dict(size=10, symbol='diamond')
+    ))
+
+    # 추세선 (상향 곡선 확인용)
+    z = np.polyfit(trend_df['회차'], trend_df['EF'], 1)
+    p = np.poly1d(z)
+    fig3.add_trace(go.Scatter(
+        x=trend_df['회차'], 
+        y=p(trend_df['회차']),
+        name='성장 추세선',
+        line=dict(color='rgba(255, 255, 255, 0.3)', dash='dash')
+    ))
+
+    fig3.update_layout(
+        template="plotly_dark",
+        height=400,
+        xaxis_title="훈련 회차 (Session)",
+        yaxis_title="Efficiency Factor (W/bpm)",
+        hovermode="x unified"
+    )
+    
+    st.plotly_chart(fig3, use_container_width=True)
+
+    # EF 분석 코멘트
+    current_ef = trend_df['EF'].iloc[-1]
+    initial_ef = trend_df['EF'].iloc[0]
+    improvement = ((current_ef - initial_ef) / initial_ef) * 100
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("현재 EF", f"{current_ef:.2f}")
+    c2.metric("초기 대비 개선율", f"{improvement:+.1f}%")
+    c3.write(f"**AI 코치 분석:** {'엔진 효율이 상승 중입니다! 파워 상향을 고려해 보세요.' if improvement > 5 else '기초 유산소 다지기 단계입니다.'}")
