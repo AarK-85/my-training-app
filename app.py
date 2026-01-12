@@ -5,6 +5,38 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
+# (기존 라이브러리 로드 부분...)
+
+if not df.empty and s_data is not None:
+    # --- [NEW] AI 코치 헤드라인 섹션 ---
+    st.markdown("### 🤖 AI Coach's Daily Briefing")
+    
+    # 분석 데이터 준비
+    hr_array = [float(x.strip()) for x in str(s_data['전체심박데이터']).split(",")]
+    max_hr = max(hr_array)
+    current_dec = s_data['디커플링(%)']
+    current_p = s_data['본훈련파워']
+    
+    # 기승전결 문구 생성 로직
+    if current_dec <= 5.0:
+        status = "완벽한 유산소 제어 상태입니다."
+        reason = f"디커플링 {current_dec}%로 심폐 효율이 매우 안정적이며,"
+        action = f"이제 자신감을 갖고 {current_p + 5}W로 강도를 높여 엔진을 확장할 시점입니다!"
+    elif current_dec <= 8.0 and max_hr < 170: # 17회차 케이스 (5.8% 이지만 심박 제어 양호)
+        status = "엔진 확장 가능성이 확인되었습니다."
+        reason = f"디커플링({current_dec}%)이 기준을 근소하게 상회하나, 최대심박({max_hr}bpm)이 안정 범위 내에서 통제되고 있으므로,"
+        action = f"다음 세션은 {current_p + 5}W로 스텝 업하여 새로운 자극을 주어도 좋습니다!"
+    else:
+        status = "현재 구간에서의 적응이 더 필요합니다."
+        reason = f"심박 표류({current_dec}%)가 관찰되어 아직 유산소 베이스를 다지는 단계이므로,"
+        action = f"조급해하기보다 {current_p}W를 2~3회 더 반복하여 심박 제어력을 완벽히 확보합시다."
+
+    # 헤드라인 출력 (스타일 적용)
+    st.info(f"**{status}** {reason} {action}")
+    st.divider()
+
+    # (이후 그래프 및 상세 분석 로직 계속...)
+
 # 1. 페이지 설정
 st.set_page_config(page_title="Zone 2 Final Precision Lab", layout="wide")
 
