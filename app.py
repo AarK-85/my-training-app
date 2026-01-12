@@ -18,9 +18,9 @@ if not df.empty:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-# 2. 사이드바: 기록 조회 및 실시간 입력/수정
+# 2. 사이드바: 입력 인터페이스 (필요할 때만 사용하도록 구성)
 with st.sidebar:
-    st.header("⚙️ 훈련 관리 시스템")
+    st.header("⚙️ 훈련 데이터 관리")
     mode = st.radio("작업 선택", ["기존 기록 조회/수정", "🆕 새로운 회차 기록"])
     st.divider()
     
@@ -30,45 +30,40 @@ with st.sidebar:
         s_data = df[df["회차"] == selected_session].iloc[0]
         btn_label = "데이터 수정 및 저장"
     else:
-        # 새 회차 자동 계산
         next_session = int(df["회차"].max() + 1) if not df.empty else 1
         s_data = None
         selected_session = next_session
         btn_label = "🚀 새로운 훈련 데이터 저장"
 
     with st.form(key="training_input_form"):
-        st.subheader(f"📝 {int(selected_session)}회차 세부 사항")
-        
+        st.subheader(f"📝 {int(selected_session)}회차 기록")
         f_date = st.date_input("날짜", value=pd.to_datetime(s_data['날짜']) if s_data is not None else pd.Timestamp.now())
         f_session = st.number_input("회차 번호", value=int(selected_session), step=1)
         
-        col1, col2, col3 = st.columns(3)
-        f_wp = col1.number_input("웜업W", value=int(s_data['웜업파워']) if s_data is not None else 97, step=1)
-        f_mp = col2.number_input("본훈련W", value=int(s_data['본훈련파워']) if s_data is not None else 140, step=1)
-        f_cp = col3.number_input("쿨다운W", value=int(s_data['쿨다운파워']) if s_data is not None else 90, step=1)
+        c1, c2, c3 = st.columns(3)
+        f_wp = c1.number_input("웜업W", value=int(s_data['웜업파워']) if s_data is not None else 97, step=1)
+        f_mp = c2.number_input("본훈련W", value=int(s_data['본훈련파워']) if s_data is not None else 140, step=1)
+        f_cp = c3.number_input("쿨다운W", value=int(s_data['쿨다운파워']) if s_data is not None else 90, step=1)
         
         f_duration = st.slider("본 훈련 시간(분)", 15, 180, int(s_data['본훈련시간']) if s_data is not None else 90, step=5)
         
-        # 동적 심박수 입력 필드 (정수 처리)
+        # 심박수 일괄 입력 안내 및 동적 필드
         num_main = f_duration // 5
         total_steps = 2 + num_main + 1
         existing_hrs = str(s_data['전체심박데이터']).split(",") if s_data is not None else []
         
-        st.write(f"💓 심박 데이터 ({total_steps}개 지점)")
+        st.write(f"💓 심박수 입력 ({total_steps}개 지점)")
         hr_inputs = []
         h_cols = st.columns(3)
         for i in range(total_steps):
             try:
                 def_hr = int(float(existing_hrs[i].strip())) if i < len(existing_hrs) else 130
-            except:
-                def_hr = 130
-                
+            except: def_hr = 130
             with h_cols[i % 3]:
                 hr_val = st.number_input(f"{i*5}분", value=def_hr, key=f"hr_input_{i}", step=1)
                 hr_inputs.append(str(int(hr_val)))
         
         if st.form_submit_button(btn_label):
-            # 디커플링 계산
             main_hrs = [int(x) for x in hr_inputs[2:-1]]
             mid = len(main_hrs) // 2
             f_ef_val = f_mp / np.mean(main_hrs[:mid])
@@ -76,107 +71,99 @@ with st.sidebar:
             f_dec = round(((f_ef_val - s_ef_val) / f_ef_val) * 100, 2)
             
             new_row = {
-                "날짜": f_date.strftime("%Y-%m-%d"),
-                "회차": int(f_session),
-                "웜업파워": int(f_wp),
-                "본훈련파워": int(f_mp),
-                "쿨다운파워": int(f_cp),
-                "본훈련시간": int(f_duration),
-                "디커플링(%)": f_dec,
-                "전체심박데이터": ", ".join(hr_inputs)
+                "날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session),
+                "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp),
+                "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)
             }
-            
-            if not df.empty:
-                df = df[df["회차"] != f_session]
+            if not df.empty: df = df[df["회차"] != f_session]
             updated_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
             conn.update(data=updated_df)
-            st.success(f"✅ {int(f_session)}회차 데이터 저장 완료!")
-            st.balloons()
+            st.success("✅ 저장 완료!")
             st.rerun()
 
-# 4. 메인 분석 대시보드
+# 3. 메인 분석 대시보드 (UX 개선 반영)
 if not df.empty and s_data is not None:
-    # --- [섹션 1] AI Coach Headline ---
-    st.markdown("### 🤖 AI Coach's Daily Briefing")
-    hr_array = [int(float(x.strip())) for x in str(s_data['전체심박데이터']).split(",")]
-    max_hr = int(max(hr_array))
-    current_dec = s_data['디커플링(%)']
-    current_p = int(s_data['본훈련파워'])
+    st.title(f"📊 Session {int(s_data['회차'])} 분석 리포트")
     
-    if current_dec <= 5.0:
-        headline = f"🔥 **완벽한 제어 상태입니다.** 디커플링 {current_dec}%로 심폐 효율이 안정적이니, {current_p + 5}W로 엔진을 확장할 시점입니다!"
-    elif current_dec <= 8.0 and max_hr < 170:
-        headline = f"✅ **엔진 확장 가능성이 높습니다.** 디커플링({current_dec}%)이 소폭 있으나 최대심박({max_hr}bpm)이 잘 통제되고 있습니다. 다음 세션은 {current_p + 5}W 도전을 추천합니다!"
-    else:
-        headline = f"⏳ **현재 구간 적응이 더 필요합니다.** 심박 표류({current_dec}%)가 관찰되니, {current_p}W를 반복하여 제어력을 확보합시다."
-    st.info(headline)
-    st.divider()
+    # [개선 1] 탭 구조 도입
+    tab1, tab2 = st.tabs(["🎯 오늘의 훈련 분석", "📈 장기 성장 추이"])
 
-    # --- [섹션 2] 정밀 시퀀스 분석 ---
-    st.title(f"📊 Session {int(s_data['회차'])} 시퀀스 분석")
-    time_array = [i*5 for i in range(len(hr_array))]
-    wp, mp, cp = int(s_data['웜업파워']), int(s_data['본훈련파워']), int(s_data['쿨다운파워'])
-    
-    power_array = []
-    num_main_end_idx = 2 + (int(s_data['본훈련시간']) // 5)
-    for i in range(len(time_array)):
-        if i < 2: power_array.append(wp)
-        elif i < num_main_end_idx: power_array.append(mp)
-        else: power_array.append(cp)
+    with tab1:
+        # AI 코치 헤드라인
+        hr_array = [int(float(x.strip())) for x in str(s_data['전체심박데이터']).split(",")]
+        current_dec = s_data['디커플링(%)']
+        current_p = int(s_data['본훈련파워'])
+        max_hr = int(max(hr_array))
 
-    fig1 = make_subplots(specs=[[{"secondary_y": True}]])
-    fig1.add_trace(go.Scatter(x=time_array, y=power_array, name="Power (W)", line=dict(color='cyan', width=3, shape='hv'), fill='tozeroy', fillcolor='rgba(0, 255, 255, 0.1)'), secondary_y=False)
-    fig1.add_trace(go.Scatter(x=time_array, y=hr_array, name="HR (BPM)", line=dict(color='red', width=4, shape='spline')), secondary_y=True)
-    
-    m_end_time = int(s_data['본훈련시간']) + 10
-    fig1.add_vrect(x0=0, x1=10, fillcolor="gray", opacity=0.1, annotation_text="WU")
-    fig1.add_vrect(x0=10, x1=m_end_time, fillcolor="blue", opacity=0.05, annotation_text="Main")
-    fig1.add_vrect(x0=m_end_time, x1=time_array[-1], fillcolor="gray", opacity=0.1, annotation_text="CD")
-    fig1.update_layout(template="plotly_dark", height=500, hovermode="x unified")
-    st.plotly_chart(fig1, use_container_width=True)
-    st.caption("**💡 그래프 해석:** 파란색 면적은 목표 파워(W)이며, 빨간색 선은 심박수(BPM)의 변화입니다. 본 훈련 구간에서 심박수 선이 파워 면적과 평행을 유지할수록 유산소 기초가 탄탄함을 의미합니다.")
+        if current_dec <= 5.0:
+            st.success(f"🤖 **AI 코치:** 완벽한 제어 상태입니다! {current_p + 5}W로 확장을 추천합니다.")
+        elif current_dec <= 8.0:
+            st.warning(f"🤖 **AI 코치:** 엔진 확장 가능성이 보입니다. 심박 통제에 집중하며 {current_p + 5}W에 도전해보세요.")
+        else:
+            st.error(f"🤖 **AI 코치:** 현재 구간({current_p}W) 적응이 더 필요합니다. 반복 훈련을 권장합니다.")
 
-    # --- [섹션 3] Cardiac Drift 분석 ---
-    st.divider()
-    st.subheader("🎯 Cardiac Drift 시각적 분석 (전반 vs 후반)")
-    main_hrs = hr_array[2:-1]
-    mid = len(main_hrs) // 2
-    f_half, s_half = main_hrs[:mid], main_hrs[mid:]
-    
-    fig2 = go.Figure()
-    fig2.add_trace(go.Scatter(x=list(range(len(f_half))), y=f_half, name='전반부 (Stability)', line=dict(color='cyan', width=2)))
-    fig2.add_trace(go.Scatter(x=list(range(len(s_half))), y=s_half, name='후반부 (Drift)', line=dict(color='red', width=2), fill='tonexty', fillcolor='rgba(255, 0, 0, 0.1)'))
-    fig2.update_layout(template="plotly_dark", height=400)
-    
-    cola, colb = st.columns([2, 1])
-    with cola: st.plotly_chart(fig2, use_container_width=True)
-    with colb:
-        drift_val = np.mean(s_half) - np.mean(f_half)
-        st.metric("심박 상승 폭", f"+{drift_val:.1f} bpm", delta=f"{current_dec}%", delta_color="inverse")
-    st.caption(f"**🎯 Cardiac Drift(심박 표류):** 동일한 {int(mp)}W 파워를 유지할 때, 전반부 대비 후반부 심박수가 얼마나 상승했는지 비교합니다. 디커플링 수치가 **5% 이내**라면 해당 파워는 사용자님의 완벽한 'Zone 2' 영역에 들어온 것입니다.")
+        # [개선 2] 조건부 컬러 메트릭 카드
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("훈련 파워", f"{current_p} W")
+        
+        # 디커플링 상태에 따른 색상 시각화
+        dec_color = "normal" if current_dec <= 5.0 else "inverse"
+        m2.metric("디커플링", f"{current_dec}%", delta="- 안정" if current_dec <= 5.0 else "+ 주의", delta_color=dec_color)
+        m3.metric("최대 심박", f"{max_hr} BPM")
+        m4.metric("훈련 시간", f"{int(s_data['본훈련시간'])} 분")
 
-    # --- [섹션 4] 장기 지표 (EF & HRR) ---
-    st.divider()
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("📈 유산소 효율성(EF) 추이")
-        def calc_ef_func(row):
-            hrs = [float(x.strip()) for x in str(row['전체심박데이터']).split(",")]
-            return int(row['본훈련파워']) / np.mean(hrs[2:-1])
-        t_df = df.copy()
-        t_df['EF'] = t_df.apply(calc_ef_func, axis=1)
-        fig3 = go.Figure(go.Scatter(x=t_df['회차'], y=t_df['EF'], mode='lines+markers', line=dict(color='springgreen', width=3)))
-        fig3.update_layout(template="plotly_dark", height=350, xaxis=dict(dtick=1))
-        st.plotly_chart(fig3, use_container_width=True)
-        st.info("**📈 EF(Efficiency Factor):** 유산소 효율 지수입니다. [파워 ÷ 평균 심박]으로 계산하며, 수치가 높을수록 '더 낮은 심박으로 더 높은 파워'를 내고 있다는 성장의 증거입니다.")
-    with c2:
-        st.subheader("💓 심박 회복력 (HRR)")
-        def calc_hrr_func(row):
-            hrs = [float(x.strip()) for x in str(row['전체심박데이터']).split(",")]
-            return int(hrs[-2] - hrs[-1])
-        h_df = df.copy()
-        h_df['HRR'] = h_df.apply(calc_hrr_func, axis=1)
-        fig4 = go.Figure(go.Bar(x=h_df['회차'], y=h_df['HRR'], marker_color='orange'))
-        fig4.update_layout(template="plotly_dark", height=350, xaxis=dict(dtick=1))
-        st.plotly_chart(fig4, use_container_width=True)
-        st.info("**💓 HRR(Heart Rate Recovery):** 본 훈련 종료 후 5분간 떨어진 심박수입니다. 이 막대가 높을수록 심장 근육의 회복 능력이 뛰어나며, 유산소 엔진이 강력해졌음을 의미합니다.")
+        st.divider()
+
+        # 그래프 배치 (시퀀스 분석)
+        time_array = [i*5 for i in range(len(hr_array))]
+        power_array = [int(s_data['웜업파워'])]*2 + [current_p]*(int(s_data['본훈련시간'])//5) + [int(s_data['쿨다운파워'])]
+        
+        fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+        fig1.add_trace(go.Scatter(x=time_array, y=power_array, name="Power", line=dict(color='cyan', width=3, shape='hv'), fill='tozeroy'), secondary_y=False)
+        fig1.add_trace(go.Scatter(x=time_array, y=hr_array, name="HR", line=dict(color='red', width=4)), secondary_y=True)
+        fig1.update_layout(template="plotly_dark", height=450, margin=dict(l=20, r=20, t=30, b=20))
+        st.plotly_chart(fig1, use_container_width=True)
+        st.caption("**💡 시퀀스 해석:** 파워(하늘색 면적) 대비 심박(빨간 선)이 평행하게 유지되는지 확인하세요. 후반부에 빨간 선이 위로 치솟는다면 유산소 부하가 한계에 도달한 것입니다.")
+
+        # Drift 분석
+        st.subheader("🎯 Cardiac Drift (전반 vs 후반)")
+        main_hrs = hr_array[2:-1]
+        mid = len(main_hrs) // 2
+        f_h, s_h = main_hrs[:mid], main_hrs[mid:]
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(y=f_h, name='전반부', line=dict(color='cyan')))
+        fig2.add_trace(go.Scatter(y=s_h, name='후반부', line=dict(color='red'), fill='tonexty'))
+        fig2.update_layout(template="plotly_dark", height=300, margin=dict(l=20, r=20, t=10, b=10))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    with tab2:
+        # [개선 3] 최종 목표 달성률 시각화
+        target_w = 160
+        progress = min(current_p / target_w, 1.0)
+        st.subheader(f"🏁 최종 목표({target_w}W) 달성률: {progress*100:.1f}%")
+        st.progress(progress)
+        st.write(f"현재 **{current_p}W** 구간에서 훈련 중입니다. 목표까지 **{target_w - current_p}W** 남았습니다!")
+        
+        st.divider()
+
+        # 장기 지표 트렌드 (EF & HRR)
+        c_left, c_right = st.columns(2)
+        with c_left:
+            st.subheader("📈 유산소 효율(EF) 추이")
+            def get_ef(r): return int(r['본훈련파워']) / np.mean([float(x) for x in str(r['전체심박데이터']).split(",")][2:-1])
+            df_ef = df.copy(); df_ef['EF'] = df_ef.apply(get_ef, axis=1)
+            fig_ef = go.Figure(go.Scatter(x=df_ef['회차'], y=df_ef['EF'], mode='lines+markers', line=dict(color='springgreen')))
+            fig_ef.update_layout(template="plotly_dark", height=350, xaxis=dict(dtick=1))
+            st.plotly_chart(fig_ef, use_container_width=True)
+            st.info("성장할수록 '더 낮은 심박으로 더 높은 파워'를 내게 되어 EF 수치가 우상향합니다.")
+
+        with c_right:
+            st.subheader("💓 심박 회복력(HRR) 추이")
+            def get_hrr(r): 
+                hrs = [float(x) for x in str(r['전체심박데이터']).split(",")]
+                return int(hrs[-2] - hrs[-1])
+            df_hrr = df.copy(); df_hrr['HRR'] = df_hrr.apply(get_hrr, axis=1)
+            fig_hrr = go.Figure(go.Bar(x=df_hrr['회차'], y=df_hrr['HRR'], marker_color='orange'))
+            fig_hrr.update_layout(template="plotly_dark", height=350, xaxis=dict(dtick=1))
+            st.plotly_chart(fig_hrr, use_container_width=True)
+            st.info("훈련 직후 심박수가 빠르게 떨어질수록(높은 막대) 심폐 회복 능력이 뛰어난 상태입니다.")
