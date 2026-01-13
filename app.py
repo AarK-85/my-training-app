@@ -5,8 +5,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
-# 1. 페이지 설정 및 디자인 (CSS)
+# 1. 페이지 설정 및 shadcn 스타일 테마
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
+
 st.markdown("""
     <style>
     .main { background-color: #09090b; }
@@ -31,9 +32,9 @@ if not df.empty:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-# 3. 사이드바
+# 3. 사이드바 (내림차순 정렬)
 with st.sidebar:
-    st.markdown("### 🔍 기록 선택")
+    st.markdown("### 🔍 History")
     if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
         selected_session = st.selectbox("조회할 회차", sessions, index=0)
@@ -47,6 +48,7 @@ tab_entry, tab_analysis, tab_trends = st.tabs(["🆕 New Session", "🎯 Analysi
 
 # --- [TAB 1: 데이터 입력/수정] ---
 with tab_entry:
+    st.markdown('<p class="section-title">Record Training Data</p>', unsafe_allow_html=True)
     with st.form(key="modern_entry_form"):
         c1, c2, c3 = st.columns([1, 1, 2])
         f_date = c1.date_input("날짜", value=pd.to_datetime(s_data['날짜']) if s_data is not None else pd.Timestamp.now())
@@ -58,18 +60,19 @@ with tab_entry:
         f_mp = p2.number_input("본훈련", value=int(s_data['본훈련파워']) if s_data is not None else 140, step=1)
         f_cp = p3.number_input("쿨다운", value=int(s_data['쿨다운파워']) if s_data is not None else 90, step=1)
         
-        hr_inputs = []
-        h_cols = st.columns(4)
         num_main = f_duration // 5
         total_steps = 2 + num_main + 1
         existing_hrs = str(s_data['전체심박데이터']).split(",") if s_data is not None else []
+        
+        hr_inputs = []
+        h_cols = st.columns(4)
         for i in range(total_steps):
             t_label = f"{i*5}m"
             tag = f"🟢 {t_label}" if i < 2 else (f"🔵 {t_label}" if i < 2 + num_main else f"⚪ {t_label}")
             try: def_hr = int(float(existing_hrs[i].strip()))
             except: def_hr = 130
             with h_cols[i % 4]:
-                hr_val = st.number_input(tag, value=def_hr, key=f"hr_input_{i}", step=1)
+                hr_val = st.number_input(tag, value=def_hr, key=f_input_{i}, step=1)
                 hr_inputs.append(str(int(hr_val)))
         
         if st.form_submit_button("🚀 SAVE TRAINING RECORD", use_container_width=True):
@@ -81,9 +84,10 @@ with tab_entry:
             new_row = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)}
             updated_df = pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
             conn.update(data=updated_df)
+            st.success("✅ 저장되었습니다!")
             st.rerun()
 
-# --- [TAB 2: 분석 결과 (AI 브리핑 수정)] ---
+# --- [TAB 2: 분석 결과 (17회차 실전 코칭 로직 완벽 반영)] ---
 with tab_analysis:
     if not df.empty and s_data is not None:
         st.markdown("### 🤖 AI Coach's Daily Briefing")
@@ -92,36 +96,31 @@ with tab_analysis:
         current_p, current_dur = int(s_data['본훈련파워']), int(s_data['본훈련시간'])
         max_hr = int(max(hr_array))
 
-        # 🎯 [수정된 AI 코칭 로직]
-        # 1. 디커플링 5% 이하인 경우
+        # 🎯 [실전 코칭 로직: 5.8% 디커플링이어도 전진!]
         if current_dec <= 5.0:
-            if current_dur < 105: # 사용자 훈련 볼륨 목표(예: 105분) 미만일 경우
-                st.success(f"**🔥 유산소 엔진이 매우 안정적입니다.** {current_p}W에서 디커플링 {current_dec}%로 심폐 효율이 확보되었습니다. 강도를 높이기 전, **시간을 {current_dur + 15}분으로 늘려** 순수 Zone 2 볼륨을 더 확보하는 것을 강력 추천합니다.")
-            else: # 볼륨을 충분히 확보한 경우
-                st.success(f"**🚀 목표 볼륨과 안정성을 모두 달성했습니다.** {current_dur}분 동안 디커플링을 완벽히 통제했습니다. 다음 세션은 강도를 **{current_p + 5}W로 상향**하여 새로운 자극을 줄 시점입니다!")
-        # 2. 디커플링 5%~8% 사이인 경우
+            st.success(f"**🔥 완벽한 유산소 제어 상태입니다.** 디커플링 {current_dec}%로 심폐 효율이 매우 안정적입니다. 이제 강도를 **{current_p + 5}W로 높여** 엔진을 확장할 시점입니다!")
         elif current_dec <= 8.0:
-            st.warning(f"**✅ 적응이 진행 중입니다.** 파워({current_p}W)에 비해 심박수 표류({current_dec}%)가 소폭 관찰됩니다. 현재 강도와 시간을 **1~2회 더 반복**하여 디커플링을 5% 이내로 안정화하는 과정이 필요합니다.")
-        # 3. 디커플링 8% 초과인 경우
+            # 17회차 케이스 (디커플링이 5%를 약간 넘었지만 상향을 권했던 논리)
+            st.info(f"**✅ 엔진 확장 가능성이 확인되었습니다.** 디커플링({current_dec}%)이 기준을 근소하게 상회하나, 최대심박({max_hr}bpm)이 안정 범위 내에서 통제되고 있으므로 다음 세션은 **{current_p + 5}W로 스텝 업**하여 볼륨을 키워도 좋습니다!")
         else:
-            st.error(f"**⏳ 과부하가 감지되었습니다.** 디커플링({current_dec}%)이 높고 후반부 심박 제어가 어렵습니다. 다음 세션은 **파워를 5W 낮추거나 시간을 15분 줄여** 유산소 기초를 다시 점검해야 합니다.")
+            st.error(f"**⏳ 현재 구간에서의 적응이 더 필요합니다.** 심박 표류({current_dec}%)가 관찰되어 아직 유산소 베이스를 다지는 단계입니다. 조급해하기보다 **{current_p}W를 1~2회 더 반복**하여 제어력을 확보합시다.")
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("훈련 파워", f"{current_p}W")
-        m2.metric("디커플링", f"{current_dec}%", delta="- 안정" if current_dec <= 5.0 else "+ 주의", delta_color="normal" if current_dec <= 5.0 else "inverse")
+        m2.metric("디커플링", f"{current_dec}%", delta="- 안정" if current_dec <= 5.0 else "+ 상향가능", delta_color="normal" if current_dec <= 8.0 else "inverse")
         m3.metric("최대 심박", f"{max_hr}BPM")
         m4.metric("볼륨", f"{current_dur}m")
 
         st.divider()
         time_array = [i*5 for i in range(len(hr_array))]
-        power_array = ([int(s_data['웜업파워'])]*2 + [current_p]*(current_dur//5) + [int(s_data['쿨다운파워'])])[:len(time_array)]
-        
+        power_array = ([int(s_data['웜업파워'])]*2 + [current_p]*(current_dur//5) + [int(s_data['쿨다운파워'])])
+        power_array = (power_array + [int(s_data['쿨다운파워'])] * (len(time_array) - len(power_array)))[:len(time_array)]
+
         fig1 = make_subplots(specs=[[{"secondary_y": True}]])
         fig1.add_trace(go.Scatter(x=time_array, y=power_array, name="Power", line=dict(color='#3b82f6', width=3, shape='hv'), fill='tozeroy', fillcolor='rgba(59, 130, 246, 0.1)'), secondary_y=False)
         fig1.add_trace(go.Scatter(x=time_array, y=hr_array, name="HR", line=dict(color='#ef4444', width=4, shape='spline')), secondary_y=True)
         fig1.update_layout(template="plotly_dark", height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=20, r=20, t=30, b=20))
         st.plotly_chart(fig1, use_container_width=True)
-        st.caption("**💡 해석:** 파란색 면적(파워) 대비 빨간색 선(심박)이 평행하게 유지될수록 유산소 기초가 탄탄합니다.")
 
 # --- [TAB 3: 장기 트렌드] ---
 with tab_trends:
@@ -148,7 +147,7 @@ with tab_trends:
         col_ef, col_hrr = st.columns(2)
         with col_ef:
             st.markdown("### Efficiency Index (EF)")
-            st.plotly_chart(go.Figure(go.Scatter(x=df['회차'], y=df['EF'], mode='lines+markers', line=dict(color='#10b981', width=3))).update_layout(template="plotly_dark", height=350), use_container_width=True)
+            st.plotly_chart(go.Figure(go.Scatter(x=df['회차'], y=df['EF'], mode='lines+markers', line=dict(color='#10b981', width=3))).update_layout(template="plotly_dark", height=350, xaxis=dict(dtick=1)), use_container_width=True)
         with col_hrr:
             st.markdown("### HR Recovery (BPM)")
-            st.plotly_chart(go.Figure(go.Bar(x=df['회차'], y=df['HRR'], marker_color='#f59e0b')).update_layout(template="plotly_dark", height=350), use_container_width=True)
+            st.plotly_chart(go.Figure(go.Bar(x=df['회차'], y=df['HRR'], marker_color='#f59e0b')).update_layout(template="plotly_dark", height=350, xaxis=dict(dtick=1)), use_container_width=True)
