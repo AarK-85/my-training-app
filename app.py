@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
-# [보안 및 에러 방지] Gemini 라이브러리 체크
+# Gemini 라이브러리 체크
 try:
     import google.generativeai as genai
     gemini_installed = True
@@ -15,7 +15,7 @@ except ImportError:
 # 1. 페이지 설정
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Gemini API 설정] ---
+# Gemini API 설정
 gemini_ready = False
 if gemini_installed:
     if "GEMINI_API_KEY" in st.secrets:
@@ -26,7 +26,7 @@ if gemini_installed:
         except Exception:
             gemini_ready = False
 
-# CSS 스타일 정의
+# 스타일 정의
 st.markdown("""
     <style>
     .main { background-color: #09090b; }
@@ -53,7 +53,7 @@ if not df.empty:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-# 3. 사이드바 (History 조회)
+# 3. 사이드바 (History)
 with st.sidebar:
     st.markdown("### 🔍 History")
     if not df.empty:
@@ -63,28 +63,27 @@ with st.sidebar:
     else:
         s_data = None
 
-# 4. 메인 화면 탭 구성
+# 4. 메인 화면 구성
 tab_entry, tab_analysis, tab_trends = st.tabs(["🆕 New Session", "🎯 Analysis", "📈 Trends"])
 
-# --- [TAB 1: 데이터 입력 (실시간 동적 UI)] ---
+# --- [TAB 1: 데이터 입력 (동적 UI)] ---
 with tab_entry:
     st.markdown('<p class="section-title">Step 1: Training Setup</p>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 2])
     f_date = c1.date_input("날짜", value=pd.to_datetime(s_data['날짜']) if s_data is not None else pd.Timestamp.now().date())
     f_session = c2.number_input("회차", value=int(df["회차"].max() + 1) if not df.empty else 1, step=1)
     
-    # [핵심] 폼 외부에 슬라이더를 배치하여 조절 즉시 하단 UI가 갱신됩니다.
+    # 슬라이더 조절 즉시 아래 입력창 개수가 변합니다.
     f_duration = c3.slider("본 훈련 시간(분) 설정", 15, 180, int(s_data['본훈련시간']) if s_data is not None else 60, step=5)
     
     p1, p2, p3 = st.columns(3)
-    f_wp = p1.number_input("웜업 파워 (10분 고정)", value=int(s_data['웜업파워']) if s_data is not None else 100)
+    f_wp = p1.number_input("웜업 파워 (10분)", value=int(s_data['웜업파워']) if s_data is not None else 100)
     f_mp = p2.number_input("본훈련 파워", value=int(s_data['본훈련파워']) if s_data is not None else 140)
-    f_cp = p3.number_input("쿨다운 파워 (5분 고정)", value=int(s_data['쿨다운파워']) if s_data is not None else 90)
+    f_cp = p3.number_input("쿨다운 파워 (5분)", value=int(s_data['쿨다운파워']) if s_data is not None else 90)
 
     st.divider()
     st.markdown(f'<p class="section-title">Step 2: Heart Rate Entry ({f_duration + 15}m Full Course)</p>', unsafe_allow_html=True)
 
-    # 데이터 포인트: 웜업(0,5,10) + 본훈련(15...종료) + 쿨다운(+5)
     total_points = ( (10 + f_duration + 5) // 5 ) + 1
     existing_hrs = str(s_data['전체심박데이터']).split(",") if s_data is not None else []
     
@@ -98,13 +97,15 @@ with tab_entry:
         
         try: def_val = int(float(existing_hrs[i].strip()))
         except: def_val = 130
-        
+            
         with h_cols[i % 4]:
-            hr_val = st.number_input(label, value=def_val, key=f"hr_input_val_{i}", step=1)
+            hr_val = st.number_input(label, value=def_val, key=f"hr_input_point_{i}", step=1)
             hr_inputs.append(str(int(hr_val)))
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🚀 SAVE TRAINING RECORD", use_container_width=True):
+    
+    # [수정] use_container_width=True -> width='stretch'
+    if st.button("🚀 SAVE TRAINING RECORD", width='stretch'):
         main_hrs = [int(x) for x in hr_inputs[2:-1]]
         mid = len(main_hrs) // 2
         if len(main_hrs) >= 2:
@@ -121,10 +122,10 @@ with tab_entry:
         updated_df = pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
         updated_df['날짜'] = updated_df['날짜'].astype(str)
         conn.update(data=updated_df)
-        st.success("✅ 저장되었습니다!")
+        st.success("데이터 저장 성공!")
         st.rerun()
 
-# --- [TAB 2: 분석 결과 및 Gemini 코칭] ---
+# --- [TAB 2: 분석 및 Gemini 채팅] ---
 with tab_analysis:
     if not df.empty and s_data is not None:
         st.markdown("### 🤖 AI Coach's Daily Briefing")
@@ -138,7 +139,8 @@ with tab_analysis:
         m3.metric("Max HR", f"{max_hr}bpm")
         m4.metric("Volume", f"{current_dur}m")
 
-        # 수직 단계형 그래프
+        st.divider()
+
         time_x = [i*5 for i in range(len(hr_array))]
         power_y = []
         num_main_end = 2 + (current_dur // 5)
@@ -150,17 +152,15 @@ with tab_analysis:
         fig1 = make_subplots(specs=[[{"secondary_y": True}]])
         fig1.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#3b82f6', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(59, 130, 246, 0.1)'), secondary_y=False)
         fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ef4444', width=3, shape='spline')), secondary_y=True)
-        fig1.update_layout(template="plotly_dark", height=450, hovermode="x unified", margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig1, use_container_width=True)
+        fig1.update_layout(template="plotly_dark", height=450, margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(fig1, width='stretch')
 
         st.divider()
-        
-        # 💬 Gemini AI 채팅
         st.markdown("### 💬 Chat with Gemini Coach")
         if not gemini_installed:
-            st.error("`google-generativeai` 라이브러리가 설치되지 않았습니다. GitHub의 `requirements.txt`에 추가해 주세요.")
+            st.error("`google-generativeai` 라이브러리 설치가 필요합니다. `requirements.txt`에 `google-generativeai`를 추가하세요.")
         elif not gemini_ready:
-            st.warning("Streamlit Cloud 설정(Secrets)에서 `GEMINI_API_KEY`를 추가해 주세요.")
+            st.warning("Streamlit Secrets에 `GEMINI_API_KEY`를 설정해 주세요.")
         else:
             if "messages" not in st.session_state: st.session_state.messages = []
             chat_container = st.container(height=300)
@@ -168,12 +168,12 @@ with tab_analysis:
                 for msg in st.session_state.messages:
                     with st.chat_message(msg["role"]): st.markdown(msg["content"])
             
-            if prompt := st.chat_input("Gemini 코치에게 질문하세요..."):
+            if prompt := st.chat_input("Gemini에게 질문하세요..."):
                 st.session_state.messages.append({"role": "user", "content": prompt})
                 with chat_container:
                     with st.chat_message("user"): st.markdown(prompt)
                 
-                context = f"사이클링 코치로서 {selected_session}회차 데이터를 보고 분석해줘. 파워: {current_p}W, 디커플링: {current_dec}%. 질문: {prompt}"
+                context = f"코치로서 {selected_session}회차 데이터를 분석해줘. 파워:{current_p}W, 디커플링:{current_dec}%, 심박:{hr_array}. 질문:{prompt}"
                 with chat_container:
                     with st.chat_message("assistant"):
                         response = ai_model.generate_content(context)
@@ -183,19 +183,7 @@ with tab_analysis:
 # --- [TAB 3: Trends] ---
 with tab_trends:
     if not df.empty:
-        def safe_ef(r):
-            try:
-                hrs = [float(x.strip()) for x in str(r['전체심박데이터']).split(",")]
-                main = hrs[2:-1]
-                return int(r['본훈련파워']) / np.mean(main) if len(main) > 0 else 0
-            except: return 0
-        df['EF'] = df.apply(safe_ef, axis=1)
         df_vol = df.copy(); df_vol['날짜'] = pd.to_datetime(df_vol['날짜'])
         weekly_v = df_vol.set_index('날짜')['본훈련시간'].resample('W').sum().reset_index()
         weekly_v['날짜'] = weekly_v['날짜'].dt.strftime('%m/%d')
-
-        st.subheader(f"🏁 최종 목표(160W) 달성률: {min(int(s_data['본훈련파워'])/160*100, 100.0):.1f}%")
-        st.progress(min(int(s_data['본훈련파워'])/160, 1.0))
-        
-        st.plotly_chart(go.Figure(go.Scatter(x=df['회차'], y=df['EF'], mode='lines+markers', line=dict(color='#10b981', width=3))).update_layout(template="plotly_dark", title="Efficiency Index Trend", height=300), use_container_width=True)
-        st.plotly_chart(go.Figure(go.Bar(x=weekly_v['날짜'], y=weekly_v['본훈련시간'], marker_color='#8b5cf6')).update_layout(template="plotly_dark", title="Weekly Volume (min)", height=300), use_container_width=True)
+        st.plotly_chart(go.Figure(go.Bar(x=weekly_v['날짜'], y=weekly_v['본훈련시간'], marker_color='#8b5cf6')).update_layout(template="plotly_dark", title="Weekly Volume (min)", height=350), width='stretch')
