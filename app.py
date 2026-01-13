@@ -15,21 +15,18 @@ except ImportError:
 # 1. 페이지 설정
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Gemini API 설정: Secrets 연동 강화] ---
+# --- [Gemini API 설정: 에러 방지 강화] ---
 gemini_ready = False
 if gemini_installed:
-    # Secrets 키 대소문자 구분 없이 확인하기 위해 처리
-    secrets_keys = [k.upper() for k in st.secrets.keys()]
-    if "GEMINI_API_KEY" in secrets_keys or "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if api_key:
         try:
-            # st.secrets["GEMINI_API_KEY"] 가 존재하는지 확인
-            api_key = st.secrets.get("GEMINI_API_KEY")
-            if api_key:
-                genai.configure(api_key=api_key)
-                ai_model = genai.GenerativeModel('gemini-1.5-flash')
-                gemini_ready = True
+            genai.configure(api_key=api_key)
+            # 가장 범용적인 모델명인 'models/gemini-1.5-flash'를 사용합니다.
+            ai_model = genai.GenerativeModel('gemini-1.5-flash')
+            gemini_ready = True
         except Exception as e:
-            st.error(f"Gemini 설정 중 오류 발생: {e}")
+            st.error(f"Gemini 초기화 오류: {e}")
 
 # 스타일 정의
 st.markdown("""
@@ -58,7 +55,7 @@ if not df.empty:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-# 3. 사이드바
+# 3. 사이드바 (History)
 with st.sidebar:
     st.markdown("### 🔍 History")
     if not df.empty:
@@ -97,15 +94,12 @@ with tab_entry:
         if t <= 10: label = f"🟢 웜업 {t}m"
         elif t <= 10 + f_duration: label = f"🔵 본훈련 {t}m"
         else: label = f"⚪ 쿨다운 {t}m"
-        
         try: def_val = int(float(existing_hrs[i].strip()))
         except: def_val = 130
-            
         with h_cols[i % 4]:
             hr_val = st.number_input(label, value=def_val, key=f"hr_input_point_{i}", step=1)
             hr_inputs.append(str(int(hr_val)))
 
-    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🚀 SAVE TRAINING RECORD", width='stretch'):
         main_hrs = [int(x) for x in hr_inputs[2:-1]]
         mid = len(main_hrs) // 2
@@ -114,7 +108,6 @@ with tab_entry:
             s_ef = f_mp / np.mean(main_hrs[mid:])
             f_dec = round(((f_ef - s_ef) / f_ef) * 100, 2)
         else: f_dec = 0
-
         new_row = {
             "날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), 
             "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), 
@@ -140,8 +133,6 @@ with tab_analysis:
         m3.metric("Max HR", f"{max_hr}bpm")
         m4.metric("Volume", f"{current_dur}m")
 
-        st.divider()
-
         time_x = [i*5 for i in range(len(hr_array))]
         power_y = []
         num_main_end = 2 + (current_dur // 5)
@@ -159,30 +150,35 @@ with tab_analysis:
         st.divider()
         st.markdown("### 💬 Chat with Gemini Coach")
         if not gemini_installed:
-            st.error("`google-generativeai` 라이브러리 설치가 필요합니다.")
+            st.error("라이브러리 미설치")
         elif not gemini_ready:
-            # Secrets에 키가 제대로 없을 때 실제 등록된 키 목록을 보여줘서 디버깅을 돕습니다.
-            st.warning(f"Secrets에서 `GEMINI_API_KEY`를 찾을 수 없습니다. 현재 등록된 키: {list(st.secrets.keys())}")
+            st.warning("API 키 확인 필요")
         else:
             if "messages" not in st.session_state: st.session_state.messages = []
-            chat_container = st.container(height=300)
+            chat_container = st.container(height=350)
             with chat_container:
                 for msg in st.session_state.messages:
                     with st.chat_message(msg["role"]): st.markdown(msg["content"])
             
-            if prompt := st.chat_input("질문을 입력하세요..."):
+            if prompt := st.chat_input("Gemini에게 질문하세요..."):
                 st.session_state.messages.append({"role": "user", "content": prompt})
                 with chat_container:
                     with st.chat_message("user"): st.markdown(prompt)
                 
-                context = f"사이클링 코치로서 {selected_session}회차 데이터를 분석해줘. 파워:{current_p}W, 디커플링:{current_dec}%, 심박:{hr_array}. 질문:{prompt}"
+                context = f"코치로서 {selected_session}회차 데이터를 분석해줘. 파워:{current_p}W, 디커플링:{current_dec}%, 심박:{hr_array}. 질문:{prompt}"
+                
                 with chat_container:
                     with st.chat_message("assistant"):
-                        response = ai_model.generate_content(context)
-                        st.markdown(response.text)
-                        st.session_state.messages.append({"role": "assistant", "content": response.text})
+                        try:
+                            # 🚀 API 호출 및 예외 처리 강화
+                            response = ai_model.generate_content(context)
+                            st.markdown(response.text)
+                            st.session_state.messages.append({"role": "assistant", "content": response.text})
+                        except Exception as e:
+                            st.error(f"⚠️ Gemini 응답 에러: {e}")
+                            st.info("💡 API 키가 'AI Studio'에서 활성화되었는지, 결제 정보나 지역 제한이 없는지 확인해 보세요.")
 
-# --- [TAB 3: Trends] ---
+# --- [TAB 3: Trends] --- (이전과 동일)
 with tab_trends:
     if not df.empty:
         df_vol = df.copy(); df_vol['날짜'] = pd.to_datetime(df_vol['날짜'])
