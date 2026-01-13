@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Gemini API Setup: Auto-Matching Coach Model] ---
+# --- [Gemini API Setup] ---
 gemini_ready = False
 try:
     import google.generativeai as genai
@@ -24,7 +24,7 @@ try:
 except:
     gemini_ready = False
 
-# 2. Genesis Magma Styling (All UI in English)
+# 2. Genesis Magma Styling
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -52,7 +52,7 @@ if not df.empty:
     for col in ['웜업파워', '본훈련파워', '쿨다운파워', '본훈련시간', '디커플링(%)']:
         if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-# 4. Sidebar Archive (Integer Force)
+# 4. Sidebar Archive
 with st.sidebar:
     st.markdown("<h2 style='letter-spacing:0.1em;'>ZONE 2 LAB</h2>", unsafe_allow_html=True)
     if not df.empty:
@@ -88,7 +88,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             dv = int(float(hr_list[i])) if i < len(hr_list) else 130
-            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v85_full_{i}", step=1)
+            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v87_full_{i}", step=1)
             hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -102,27 +102,33 @@ with tab_entry:
 with tab_analysis:
     if s_data is not None:
         st.markdown(f"### Intelligence Briefing: Session {int(s_data['회차'])}")
-        c_dec, c_p = s_data['디커플링(%)'], int(s_data['본훈련파워'])
+        c_dec, c_p, c_dur = s_data['디커플링(%)'], int(s_data['본훈련파워']), int(s_data['본훈련시간'])
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         avg_ef = round(c_p / np.mean(hr_array[2:-1]), 2)
         
-        # 1. AI Briefing with Dynamic Prescription
+        # [Prescription Logic: Reflecting 17th session 90min success]
+        if c_dec < 6.0 and c_dur >= 60:
+            next_p = c_p + 10 if c_p < 150 else c_p + 5
+            next_p = min(next_p, 160)
+            next_instruct = f"Level Up to {next_p}W"
+            focus_msg = f"Solid endurance at {c_dur}m. Time to attack higher intensity."
+        elif c_dec < 8.0:
+            next_instruct = f"Maintain {c_p}W for {c_dur}+ min"
+            focus_msg = "Focus on extending duration with current stability."
+        else:
+            next_instruct = f"Re-stabilize {c_p}W"
+            focus_msg = "Reduce drift before next power increment."
+
         st.markdown('<p class="section-title">AI Performance & Next Prescription</p>', unsafe_allow_html=True)
         brief_col1, brief_col2 = st.columns(2)
         with brief_col1:
             st.markdown(f"""<div class="briefing-card"><span class="prescription-badge">CURRENT RESULT</span><br>
-            Session {int(s_data['회차'])}: {c_p}W at {c_dec}% decoupling.<br>
-            Efficiency Factor: <b>{avg_ef} EF</b></div>""", unsafe_allow_html=True)
+            Session {int(s_data['회차'])}: {c_p}W / {c_dur}min<br>
+            Efficiency Factor: <b>{avg_ef} EF</b><br>Decoupling: <b>{c_dec}%</b></div>""", unsafe_allow_html=True)
         with brief_col2:
-            # Logic based on 17th session analysis rule
-            if c_dec < 5.0:
-                target_p = c_p + 5 if c_p < 160 else 160
-                next_instruct = f"Increase Target to {target_p}W"
-            else:
-                next_instruct = f"Maintain {c_p}W (Aerobic Stability Focus)"
             st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT PRESCRIPTION</span><br>
-            <b>Directive:</b> {next_instruct} for 60m.<br>
-            <b>Goal:</b> Secure stability with decoupling < 5.0%.</div>""", unsafe_allow_html=True)
+            <b>Target: {next_instruct}</b><br>
+            <b>Note:</b> {focus_msg}</div>""", unsafe_allow_html=True)
 
         # 2. Power & HR Graph
         st.markdown('<p class="section-title">Power & Heart Rate Correlation</p>', unsafe_allow_html=True)
@@ -147,7 +153,7 @@ with tab_analysis:
             fig2.layout.yaxis.update(title=dict(text="EF Factor", font=dict(color="#FF4D00")), tickfont=dict(color="#FF4D00"))
             st.plotly_chart(fig2, use_container_width=True)
         with ce2:
-            st.markdown('<div class="guide-box"><b>Efficiency Drift Guide</b><br><br>Downward slope indicates heart rate drift. Flat line means solid aerobic base.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="guide-box"><b>Efficiency Drift Guide</b><br><br>Downward slope indicates cardiac drift. Flat line means solid aerobic base.</div>', unsafe_allow_html=True)
 
         # 4. Gemini Coach with Status Indicator
         if gemini_ready:
