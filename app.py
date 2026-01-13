@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Data Loading: Optimized & Cached] ---
+# --- [Performance Optimization: Data Caching] ---
 @st.cache_data(ttl=300)
 def load_data(_conn):
     try:
@@ -42,13 +42,14 @@ try:
     else: gemini_ready = False
 except: gemini_ready = False
 
-# 3. Genesis Custom Styling
+# 3. Genesis Branding Styling
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Lexend:wght@300;500&display=swap');
     .main { background-color: #000000; font-family: 'Inter', sans-serif; }
     h1, h2, h3, p { color: #ffffff; font-family: 'Lexend', sans-serif; }
     div[data-testid="stMetricValue"] { color: #938172 !important; font-size: 2.2rem !important; }
+    div[data-testid="stMetricLabel"] { color: #A1A1AA !important; text-transform: uppercase; font-size: 0.7rem !important; }
     .stTabs [data-baseweb="tab-list"] { gap: 12px; background-color: #0c0c0e; padding: 8px 12px; border-radius: 8px; }
     .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; text-transform: uppercase; padding: 0 25px; }
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #938172 !important; }
@@ -75,7 +76,7 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-# 6. Content Tabs
+# 6. Navigation
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
 # --- [TAB 1: REGISTRATION] ---
@@ -102,7 +103,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             hr_val = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v81_{i}", step=1)
+            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v82_{i}", step=1)
             hr_inputs.append(str(int(hr_inp)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -144,6 +145,12 @@ with tab_analysis:
         </div>
         """, unsafe_allow_html=True)
 
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Target Output", f"{c_p}W")
+        m2.metric("Decoupling", f"{c_dec}%")
+        m3.metric("Avg Pulse", f"{int(avg_hr)}bpm")
+        m4.metric("Efficiency", f"{avg_ef}")
+
         col_graph, col_guide = st.columns([3, 1])
         
         with col_graph:
@@ -152,24 +159,31 @@ with tab_analysis:
             power_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + main_dur else int(s_data['쿨다운파워'])) for t in time_x]
             ef_trend = [round(p/h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
 
-            # [STABLE FIG SETUP]
+            # [REFINED FIG SETUP - NO SECONDARY_Y ARG IN UPDATE_YAXES]
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.15,
                                 specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
 
-            # Row 1: Power & HR
             fig.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), row=1, col=1, secondary_y=False)
             fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), row=1, col=1, secondary_y=True)
-            # Row 2: EF Drift
             fig.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=3)), row=2, col=1)
 
-            # [NO-ERROR AXIS CONFIG]
+            # [ULTIMATE FIX] - update_yaxes의 인자를 최소화하여 에러 발생 가능성 차단
             fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=700, margin=dict(l=0, r=0, t=30, b=0), showlegend=True)
             
-            # 축별 색상 및 타이틀 명시적 설정 (secondary_y 인자를 피해서 설정)
-            fig.update_yaxes(title_text="Power (W)", color="#938172", row=1, col=1, secondary_y=False)
-            fig.update_yaxes(title_text="HR (bpm)", color="#F4F4F5", row=1, col=1, secondary_y=True)
-            fig.update_yaxes(title_text="Efficiency (EF)", color="#FF4D00", row=2, col=1)
-            fig.update_xaxes(title_text="Time (min)", row=2, col=1)
+            # 레이아웃 딕셔너리에 직접 접근하여 축 설정 (에러 원인인 update_yaxes 내 복합 인자 제거)
+            fig.layout.yaxis.title = "Power (W)"
+            fig.layout.yaxis.titlefont.color = "#938172"
+            fig.layout.yaxis.tickfont.color = "#938172"
+            
+            fig.layout.yaxis2.title = "HR (bpm)"
+            fig.layout.yaxis2.titlefont.color = "#F4F4F5"
+            fig.layout.yaxis2.tickfont.color = "#F4F4F5"
+            
+            fig.layout.yaxis3.title = "Efficiency (EF)"
+            fig.layout.yaxis3.titlefont.color = "#FF4D00"
+            fig.layout.yaxis3.tickfont.color = "#FF4D00"
+            
+            fig.layout.xaxis2.title = "Time (min)"
             
             st.plotly_chart(fig, use_container_width=True)
 
