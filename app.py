@@ -9,21 +9,6 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Gemini API Setup] ---
-gemini_ready = False
-try:
-    import google.generativeai as genai
-    api_key = st.secrets.get("GEMINI_API_KEY")
-    if api_key:
-        genai.configure(api_key=api_key)
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        target_model = 'models/gemini-1.5-flash' if 'models/gemini-1.5-flash' in available_models else (available_models[0] if available_models else None)
-        if target_model:
-            ai_model = genai.GenerativeModel(target_model)
-            gemini_ready = True
-except:
-    gemini_ready = False
-
 # 2. Genesis Magma Styling
 st.markdown("""
     <style>
@@ -33,11 +18,10 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] { gap: 12px; background-color: #0c0c0e; padding: 8px 12px; border-radius: 8px; border: 1px solid #1c1c1f; }
     .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; text-transform: uppercase; padding: 0px 25px; }
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #938172 !important; }
-    .summary-box { background-color: #0c0c0e; border: 1px solid #1c1c1f; padding: 25px; border-radius: 12px; margin-bottom: 25px; }
-    .guide-box { color: #A1A1AA; font-size: 0.85rem; line-height: 1.6; padding: 20px; border-left: 3px solid #FF4D00; background: rgba(255, 77, 0, 0.05); }
     .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #938172; padding-left: 15px; }
-    .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; min-height: 140px; }
-    .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 10px; display: inline-block; }
+    .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; height: 180px; display: flex; flex-direction: column; justify-content: flex-start; }
+    .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; width: fit-content; }
+    .guide-box { color: #A1A1AA; font-size: 0.85rem; line-height: 1.6; padding: 20px; border-left: 3px solid #FF4D00; background: rgba(255, 77, 0, 0.05); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -74,9 +58,7 @@ with tab_entry:
     f_date = c1.date_input("Date", value=datetime.now().date())
     f_session = c2.number_input("Session No.", value=int(df["회차"].max() + 1) if not df.empty else 1, step=1)
     f_duration = c3.slider("Duration (min)", 15, 180, 60, step=5)
-    
-    p1, p2, p3 = st.columns(3)
-    f_wp, f_mp, f_cp = p1.number_input("Warm-up (W)", 100), p2.number_input("Target (W)", 140), p3.number_input("Cool-down (W)", 90)
+    p1, p2, p3 = st.columns(3); f_wp, f_mp, f_cp = p1.number_input("Warm-up (W)", 100), p2.number_input("Target (W)", 140), p3.number_input("Cool-down (W)", 90)
     
     st.divider()
     st.markdown('<p class="section-title">Biometric Telemetry</p>', unsafe_allow_html=True)
@@ -88,7 +70,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             dv = int(float(hr_list[i])) if i < len(hr_list) else 130
-            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v87_full_{i}", step=1)
+            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v88_{i}", step=1)
             hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -106,27 +88,23 @@ with tab_analysis:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         avg_ef = round(c_p / np.mean(hr_array[2:-1]), 2)
         
-        # [Prescription Logic: Reflecting 17th session 90min success]
+        # [Prescription Logic: Precise 140W Transition]
         if c_dec < 6.0 and c_dur >= 60:
-            next_p = c_p + 10 if c_p < 150 else c_p + 5
-            next_p = min(next_p, 160)
-            next_instruct = f"Level Up to {next_p}W"
-            focus_msg = f"Solid endurance at {c_dur}m. Time to attack higher intensity."
-        elif c_dec < 8.0:
-            next_instruct = f"Maintain {c_p}W for {c_dur}+ min"
-            focus_msg = "Focus on extending duration with current stability."
+            next_p = c_p + 5 if c_p < 160 else 160 # 5W 단위 정교한 상향
+            next_instruct = f"Enter {next_p}W Zone"
+            focus_msg = f"Solid base at {c_p}W confirmed. Moving to next 5W increment."
         else:
-            next_instruct = f"Re-stabilize {c_p}W"
-            focus_msg = "Reduce drift before next power increment."
+            next_instruct = f"Re-confirm {c_p}W"
+            focus_msg = "Stabilize decoupling below 5% before increment."
 
         st.markdown('<p class="section-title">AI Performance & Next Prescription</p>', unsafe_allow_html=True)
         brief_col1, brief_col2 = st.columns(2)
         with brief_col1:
-            st.markdown(f"""<div class="briefing-card"><span class="prescription-badge">CURRENT RESULT</span><br>
-            Session {int(s_data['회차'])}: {c_p}W / {c_dur}min<br>
+            st.markdown(f"""<div class="briefing-card"><span class="prescription-badge">CURRENT RESULT</span>
+            <b>Session {int(s_data['회차'])}: {c_p}W / {c_dur}m</b><br>
             Efficiency Factor: <b>{avg_ef} EF</b><br>Decoupling: <b>{c_dec}%</b></div>""", unsafe_allow_html=True)
         with brief_col2:
-            st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT PRESCRIPTION</span><br>
+            st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT PRESCRIPTION</span>
             <b>Target: {next_instruct}</b><br>
             <b>Note:</b> {focus_msg}</div>""", unsafe_allow_html=True)
 
@@ -153,29 +131,17 @@ with tab_analysis:
             fig2.layout.yaxis.update(title=dict(text="EF Factor", font=dict(color="#FF4D00")), tickfont=dict(color="#FF4D00"))
             st.plotly_chart(fig2, use_container_width=True)
         with ce2:
-            st.markdown('<div class="guide-box"><b>Efficiency Drift Guide</b><br><br>Downward slope indicates cardiac drift. Flat line means solid aerobic base.</div>', unsafe_allow_html=True)
-
-        # 4. Gemini Coach with Status Indicator
-        if gemini_ready:
-            st.markdown('<p class="section-title">Gemini Performance Coach</p>', unsafe_allow_html=True)
-            if prompt := st.chat_input("Ask Coach..."):
-                with st.status("Coach is analyzing session data...", expanded=True) as status:
-                    res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, {c_p}W, {c_dec}% decoupling. User: {prompt}")
-                    status.update(label="Analysis Complete!", state="complete", expanded=False)
-                with st.chat_message("assistant", avatar="https://www.gstatic.com/lamda/images/gemini_sparkle_v002.svg"):
-                    st.write(res.text)
+            st.markdown('<div class="guide-box"><b>Aerobic Stability</b><br><br>Downward slope indicates cardiac drift. Flat line means solid aerobic base.</div>', unsafe_allow_html=True)
 
 # --- [TAB 3: PROGRESSION] ---
 with tab_trends:
     if not df.empty:
-        # 160W Goal Progress Bar
         st.markdown('<p class="section-title">Road to 160W Final Goal</p>', unsafe_allow_html=True)
         current_max = df['본훈련파워'].max()
         progress = min(100, int((current_max / 160) * 100))
         st.write(f"**Current Achievement: {progress}% of 160W Target**")
         st.progress(progress / 100)
 
-        # Decoupling Trend
         st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
         fig_dec = go.Figure()
         fig_dec.add_trace(go.Scatter(x=df['회차'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
@@ -184,7 +150,6 @@ with tab_trends:
         fig_dec.update_xaxes(dtick=1, title="Session No.")
         st.plotly_chart(fig_dec, use_container_width=True)
         
-        # Power Progression
         st.markdown('<p class="section-title">Power Output Progression</p>', unsafe_allow_html=True)
         fig_pwr = go.Figure()
         fig_pwr.add_trace(go.Bar(x=df['회차'], y=df['본훈련파워'], marker_color='#938172'))
