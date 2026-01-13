@@ -150,6 +150,6 @@ with tab_analysis:
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
-        fig_t = go.Figure(go.Scatter(x=df['날짜'], y=df['디커플ling(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
+        fig_t = go.Figure(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
         fig_t.update_layout(template="plotly_dark", height=400, yaxis_title="Decoupling (%)")
         st.plotly_chart(fig_t, use_container_width=True)
