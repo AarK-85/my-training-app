@@ -102,7 +102,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             hr_val = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v8_{i}", step=1)
+            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v81_{i}", step=1)
             hr_inputs.append(str(int(hr_inp)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -152,30 +152,24 @@ with tab_analysis:
             power_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + main_dur else int(s_data['쿨다운파워'])) for t in time_x]
             ef_trend = [round(p/h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
 
-            # [REVOLUTIONARY FIX] - 서브플롯 생성 시 축 이름을 수동으로 매핑
+            # [STABLE FIG SETUP]
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.15,
                                 specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
 
-            # 데이터 추가
+            # Row 1: Power & HR
             fig.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), row=1, col=1, secondary_y=False)
             fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), row=1, col=1, secondary_y=True)
+            # Row 2: EF Drift
             fig.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=3)), row=2, col=1)
 
-            # [DIRECT LAYOUT UPDATE] - update_yaxes 함수를 우회하여 에러 원인 제거
-            fig.layout.update({
-                "template": "plotly_dark",
-                "paper_bgcolor": 'rgba(0,0,0,0)',
-                "plot_bgcolor": 'rgba(0,0,0,0)',
-                "height": 700,
-                "margin": dict(l=0, r=0, t=30, b=0),
-                # Row 1 Left Axis (Power)
-                "yaxis": dict(title="Power (W)", titlefont=dict(color="#938172"), tickfont=dict(color="#938172")),
-                # Row 1 Right Axis (HR)
-                "yaxis2": dict(title="HR (bpm)", titlefont=dict(color="#F4F4F5"), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y", anchor="x"),
-                # Row 2 Left Axis (EF)
-                "yaxis3": dict(title="Efficiency (EF)", titlefont=dict(color="#FF4D00"), tickfont=dict(color="#FF4D00")),
-                "xaxis2": dict(title="Time (min)")
-            })
+            # [NO-ERROR AXIS CONFIG]
+            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=700, margin=dict(l=0, r=0, t=30, b=0), showlegend=True)
+            
+            # 축별 색상 및 타이틀 명시적 설정 (secondary_y 인자를 피해서 설정)
+            fig.update_yaxes(title_text="Power (W)", color="#938172", row=1, col=1, secondary_y=False)
+            fig.update_yaxes(title_text="HR (bpm)", color="#F4F4F5", row=1, col=1, secondary_y=True)
+            fig.update_yaxes(title_text="Efficiency (EF)", color="#FF4D00", row=2, col=1)
+            fig.update_xaxes(title_text="Time (min)", row=2, col=1)
             
             st.plotly_chart(fig, use_container_width=True)
 
