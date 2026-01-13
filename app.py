@@ -28,7 +28,10 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
 if not df.empty:
-    df['날짜'] = pd.to_datetime(df['날짜'])
+    # 날짜 인식 시 시간 정보 제외하고 날짜만 추출
+    df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce').dt.date
+    df = df.dropna(subset=['날짜'])
+    
     for col in ['회차', '웜업파워', '본훈련파워', '쿨다운파워', '본훈련시간']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
@@ -52,7 +55,8 @@ with tab_entry:
     st.markdown('<p class="section-title">Record Training Data</p>', unsafe_allow_html=True)
     with st.form(key="modern_entry_form"):
         c1, c2, c3 = st.columns([1, 1, 2])
-        f_date = c1.date_input("날짜", value=pd.to_datetime(s_data['날짜']) if s_data is not None else pd.Timestamp.now())
+        # 입력 시에도 날짜만 선택
+        f_date = c1.date_input("날짜", value=pd.to_datetime(s_data['날짜']) if s_data is not None else pd.Timestamp.now().date())
         f_session = c2.number_input("회차", value=int(df["회차"].max() + 1) if not df.empty else 1, step=1)
         f_duration = c3.slider("본 훈련 시간(분)", 15, 180, int(s_data['본훈련시간']) if s_data is not None else 90, step=5)
         
@@ -82,8 +86,21 @@ with tab_entry:
             f_ef_val = f_mp / np.mean(main_hrs[:mid]) if len(main_hrs[:mid]) > 0 else 1
             s_ef_val = f_mp / np.mean(main_hrs[mid:]) if len(main_hrs[mid:]) > 0 else 1
             f_dec = round(((f_ef_val - s_ef_val) / f_ef_val) * 100, 2)
-            new_row = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)}
+            
+            # [핵심 수정] 저장 시 날짜 형식에서 시간 제거
+            new_row = {
+                "날짜": f_date.strftime("%Y-%m-%d"), 
+                "회차": int(f_session), 
+                "웜업파워": int(f_wp), 
+                "본훈련파워": int(f_mp), 
+                "쿨다운파워": int(f_cp), 
+                "본훈련시간": int(f_duration), 
+                "디커플링(%)": f_dec, 
+                "전체심박데이터": ", ".join(hr_inputs)
+            }
             updated_df = pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
+            # 시트 업데이트 전 날짜 컬럼을 한 번 더 문자열화하여 시간 유입 차단
+            updated_df['날짜'] = updated_df['날짜'].astype(str)
             conn.update(data=updated_df)
             st.success("✅ 저장되었습니다!")
             st.rerun()
@@ -124,7 +141,6 @@ with tab_analysis:
 # --- [TAB 3: 장기 트렌드] ---
 with tab_trends:
     if not df.empty:
-        # 지표 계산 함수
         def safe_ef(r):
             try:
                 hrs = [float(x.strip()) for x in str(r['전체심박데이터']).split(",")]
@@ -140,29 +156,27 @@ with tab_trends:
         df['EF'] = df.apply(safe_ef, axis=1)
         df['HRR'] = df.apply(safe_hrr, axis=1)
         
-        # 주간 볼륨 계산 (날짜 기준 주차별 그룹화)
-        weekly_volume = df.set_index('날짜')['본훈련시간'].resample('W').sum().reset_index()
+        # 주간 볼륨 계산을 위한 날짜 처리 (이미 dt.date 상태이므로 다시 변환)
+        df_vol = df.copy()
+        df_vol['날짜'] = pd.to_datetime(df_vol['날짜'])
+        weekly_volume = df_vol.set_index('날짜')['본훈련시간'].resample('W').sum().reset_index()
         weekly_volume['날짜'] = weekly_volume['날짜'].dt.strftime('%m/%d')
 
         st.subheader(f"🏁 최종 목표(160W) 달성률: {min(int(s_data['본훈련파워'])/160*100, 100.0) if s_data is not None else 0:.1f}%")
         st.progress(min(int(s_data['본훈련파워'])/160, 1.0) if s_data is not None else 0)
         
         st.divider()
-
-        # [상단] EF 및 HRR 추이
         col_ef, col_hrr = st.columns(2)
         with col_ef:
             st.markdown("### Efficiency Index (EF)")
-            st.plotly_chart(go.Figure(go.Scatter(x=df['회차'], y=df['EF'], mode='lines+markers', line=dict(color='#10b981', width=3))).update_layout(template="plotly_dark", height=300, xaxis=dict(dtick=1), margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
+            st.plotly_chart(go.Figure(go.Scatter(x=df['회차'], y=df['EF'], mode='lines+markers', line=dict(color='#10b981', width=3))).update_layout(template="plotly_dark", height=300, xaxis=dict(dtick=1)), use_container_width=True)
         with col_hrr:
             st.markdown("### HR Recovery (BPM)")
-            st.plotly_chart(go.Figure(go.Bar(x=df['회차'], y=df['HRR'], marker_color='#f59e0b')).update_layout(template="plotly_dark", height=300, xaxis=dict(dtick=1), margin=dict(l=10, r=10, t=30, b=10)), use_container_width=True)
+            st.plotly_chart(go.Figure(go.Bar(x=df['회차'], y=df['HRR'], marker_color='#f59e0b')).update_layout(template="plotly_dark", height=300, xaxis=dict(dtick=1)), use_container_width=True)
 
         st.divider()
-
-        # [하단] 위클리 볼륨 차트
-        st.markdown("### 📅 Weekly Training Volume (Min)")
-        fig_vol = go.Figure(go.Bar(x=weekly_volume['날짜'], y=weekly_volume['본훈련시간'], text=weekly_volume['본훈련시간'], textposition='auto', marker_color='#8b5cf6'))
-        fig_vol.update_layout(template="plotly_dark", height=350, margin=dict(l=10, r=10, t=30, b=10))
+        st.markdown("### 📅 Weekly Training Volume")
+        weekly_volume['hours'] = (weekly_volume['본훈련시간'] / 60).round(1)
+        fig_vol = go.Figure(go.Bar(x=weekly_volume['날짜'], y=weekly_volume['본훈련시간'], text=weekly_volume['hours'].apply(lambda x: f"{x}h"), textposition='auto', marker_color='#8b5cf6'))
+        fig_vol.update_layout(template="plotly_dark", height=350, yaxis_title="Minutes", margin=dict(l=10, r=10, t=30, b=10))
         st.plotly_chart(fig_vol, use_container_width=True)
-        st.info("**위클리 볼륨:** 매주 쌓이는 훈련 시간의 합입니다. 유산소 베이스는 이 막대의 높이가 유지되거나 점진적으로 높아질 때 가장 단단해집니다.")
