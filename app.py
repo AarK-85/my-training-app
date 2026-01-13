@@ -28,7 +28,7 @@ if gemini_installed:
             gemini_ready = True
         except: gemini_ready = False
 
-# 2. Styling (Genesis Inspired)
+# 2. Genesis Inspired Styling
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Lexend:wght@300;500&display=swap');
@@ -46,7 +46,9 @@ st.markdown("""
     div.stButton > button:hover { background-color: #938172; color: #000000; box-shadow: 0 0 15px rgba(147, 129, 114, 0.4); }
 
     .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #938172; padding-left: 15px; }
-    .summary-text { color: #A1A1AA; font-size: 0.95rem; font-weight: 300; line-height: 1.6; margin-bottom: 25px; font-style: italic; }
+    .summary-box { background-color: #0c0c0e; border: 1px solid #1c1c1f; padding: 20px; border-radius: 8px; margin-bottom: 25px; }
+    .summary-text { color: #A1A1AA; font-size: 0.95rem; font-weight: 300; line-height: 1.6; font-style: italic; }
+    .recovery-badge { display: inline-block; background-color: #938172; color: #000000; padding: 2px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-top: 10px; text-transform: uppercase; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -98,7 +100,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             def_hr = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_val = st.number_input(f"T + {i*5}m HR", value=def_hr, key=f"hr_base_v6_{i}", step=1)
+            hr_val = st.number_input(f"T + {i*5}m HR", value=def_hr, key=f"hr_pro_v7_{i}", step=1)
             hr_inputs.append(str(int(hr_val)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -117,44 +119,49 @@ with tab_analysis:
     if s_data is not None:
         st.markdown(f"### Intelligence Briefing: Session {int(s_data['회차'])}")
         
-        # [추가] 훈련 데이터 기반 자동 요약 브리핑 (Short & Concise)
         current_dec = s_data['디커플링(%)']
         current_p = int(s_data['본훈련파워'])
         hr_array = [int(float(x.strip())) for x in str(s_data['전체심박데이터']).split(",")]
-        avg_ef = round(current_p / np.mean(hr_array[2:-1]), 2)
+        avg_hr = np.mean(hr_array[2:-1])
+        avg_ef = round(current_p / avg_hr, 2)
         
-        # 위트 있고 간결한 요약 로직
-        stability = "High" if current_dec < 5 else "Moderate" if current_dec < 8 else "Fatigue Alert"
-        efficiency = "Peak" if avg_ef > 1.1 else "Solid" if avg_ef > 0.9 else "Improving"
+        # [4번 추가] Recovery Window & Summary Logic
+        stability = "Optimal" if current_dec < 5 else "Moderate" if current_dec < 8 else "High Fatigue"
+        recovery_time = "24 Hours" if current_dec < 5 else "36 Hours" if current_dec < 8 else "48 Hours+"
         
         st.markdown(f"""
-        <p class="summary-text">
-        Today's session maintained <b>{current_p}W</b> with <b>{stability}</b> stability ({current_dec}% decoupling). 
-        Efficiency remains <b>{efficiency}</b> ({avg_ef} EF). Aerobic engine is responding well.
-        </p>
+        <div class="summary-box">
+            <p class="summary-text">
+            Session {int(s_data['회차'])} at {current_p}W showed <b>{stability}</b> cardiac stability with a <b>{current_dec}%</b> decoupling rate. 
+            Aerobic efficiency is currently tracked at <b>{avg_ef} EF</b>.
+            </p>
+            <span class="recovery-badge">Recommended Recovery: {recovery_time}</span>
+        </div>
         """, unsafe_allow_html=True)
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Target Output", f"{current_p}W")
         m2.metric("Decoupling Index", f"{current_dec}%")
-        m3.metric("Avg Pulse", f"{int(np.mean(hr_array[2:-1]))}bpm")
+        m3.metric("Avg Pulse", f"{int(avg_hr)}bpm")
         m4.metric("Efficiency Factor", f"{avg_ef}")
 
+        # [2번 추가] HR Drift Detail 시각화 그래프
         time_x = [i*5 for i in range(len(hr_array))]
         power_y = [int(s_data['웜업파워']) if t < 10 else (current_p if t < 10 + int(s_data['본훈련시간']) else int(s_data['쿨다운파워'])) for t in time_x]
         
-        fig1 = make_subplots(specs=[[{"secondary_y": True}]])
-        fig1.add_trace(go.Scatter(x=time_x, y=power_y, name="Power Output (W)", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
-        fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate (bpm)", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
-        fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=400, margin=dict(l=0, r=0, t=20, b=0), hovermode="x unified")
-        st.plotly_chart(fig1, use_container_width=True)
+        # 실시간 EF 추이 (Drift 상세 분석용)
+        ef_trend = [round(p / h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
 
-        st.markdown('<p class="section-title">Efficiency Trend (Every 15m)</p>', unsafe_allow_html=True)
-        main_hr_only = hr_array[2:-1]
-        ef_intervals = [round(current_p / np.mean(main_hr_only[i:i+3]), 2) for i in range(0, len(main_hr_only), 3) if len(main_hr_only[i:i+3]) > 0]
-        fig2 = go.Figure(go.Bar(x=[f"{i*15}m" for i in range(len(ef_intervals))], y=ef_intervals, marker_color='#938172', text=ef_intervals, textposition='auto'))
-        fig2.update_layout(template="plotly_dark", height=300, yaxis_range=[min(ef_intervals)-0.1, max(ef_intervals)+0.1])
-        st.plotly_chart(fig2, use_container_width=True)
+        fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+        # Power Line
+        fig1.add_trace(go.Scatter(x=time_x, y=power_y, name="Power (W)", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
+        # HR Line
+        fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate (bpm)", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
+        # [2번 핵심] Efficiency Drift (상단에 얇게 표시)
+        fig1.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="EF Drift", line=dict(color='rgba(147, 129, 114, 0.3)', width=1)), secondary_y=True)
+        
+        fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=20, b=0), hovermode="x unified")
+        st.plotly_chart(fig1, use_container_width=True)
 
         st.divider()
         st.markdown("### :material/chat: Discussion with Gemini Coach")
@@ -164,33 +171,34 @@ with tab_analysis:
             with chat_box:
                 for m in st.session_state.messages:
                     with st.chat_message(m["role"]): st.markdown(m["content"])
-            if pr := st.chat_input("Have a quick chat with your coach..."):
+            if pr := st.chat_input("Ask about your HR drift or recovery..."):
                 st.session_state.messages.append({"role": "user", "content": pr})
                 with chat_box:
                     with st.chat_message("user"): st.markdown(pr)
-                with st.spinner("Gemini is reviewing your laps... hang tight!"):
+                with st.spinner("Coach is calculating your recovery needs..."):
                     try:
-                        res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {current_p}W, Decoupling {current_dec}%. User: {pr}")
+                        res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {current_p}W, Decoupling {current_dec}%. Goal: 160W. User: {pr}")
                         with chat_box:
                             with st.chat_message("assistant"):
                                 st.markdown(res.text)
                                 st.session_state.messages.append({"role": "assistant", "content": res.text})
-                    except Exception as e: st.error(f"Coach is busy: {e}")
+                    except Exception as e: st.error(f"Coach is offline: {e}")
 
 # --- [TAB 3: LONG-TERM PROGRESSION] ---
 with tab_trends:
     if not df.empty:
         df['날짜'] = pd.to_datetime(df['날짜'])
-        col1, col2 = st.columns(2)
-        with col1:
-            weekly = df.set_index('날짜')['본훈련시간'].resample('W').sum().reset_index()
-            st.plotly_chart(go.Figure(go.Bar(x=weekly['날짜'], y=weekly['본훈련시간'], marker_color='#938172')).update_layout(template="plotly_dark", title="Weekly Volume (min)"), use_container_width=True)
-        with col2:
-            st.plotly_chart(go.Figure(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], line=dict(color='#ffffff', width=2))).update_layout(template="plotly_dark", title="Stability Index (%)"), use_container_width=True)
+        st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
+        # 디커플링 변화 추이 (회복이 잘 되고 있는지 확인용)
+        fig3 = go.Figure()
+        fig3.add_trace(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#938172', width=2), fill='tozeroy'))
+        fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal Threshold")
+        fig3.update_layout(template="plotly_dark", height=300, title="Decoupling Over Time")
+        st.plotly_chart(fig3, use_container_width=True)
         
         st.markdown('<p class="section-title">Strategic Progression (Target: 160W)</p>', unsafe_allow_html=True)
         fig5 = go.Figure()
-        fig5.add_trace(go.Scatter(x=df['날짜'], y=df['본훈련파워'], mode='lines+markers', fill='tozeroy', line=dict(color='#938172')))
-        fig5.add_hline(y=160, line_dash="dash", line_color="#ef4444", annotation_text="End Goal 160W")
+        fig5.add_trace(go.Scatter(x=df['날짜'], y=df['본훈련파워'], mode='lines+markers', fill='tozeroy', line=dict(color='#ffffff')))
+        fig5.add_hline(y=160, line_dash="dash", line_color="#ef4444", annotation_text="Final Goal 160W")
         fig5.update_layout(template="plotly_dark", height=350)
         st.plotly_chart(fig5, use_container_width=True)
