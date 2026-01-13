@@ -6,8 +6,8 @@ from plotly.subplots import make_subplots
 import numpy as np
 from datetime import datetime
 
-# 1. Page Configuration
-st.set_page_config(page_title="GENESIS | Zone 2 Precision Lab", layout="wide")
+# 1. Page Configuration - Original Name Restored
+st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
 # Gemini API Setup (Base Reference: Auto-Matching System)
 try:
@@ -28,16 +28,15 @@ if gemini_installed:
             gemini_ready = True
         except: gemini_ready = False
 
-# 2. Genesis Brand Styling (Enhanced Button & Tab Visibility)
+# 2. Styling (Elegant Dark Theme with Copper Accents)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Lexend:wght@300;500&display=swap');
 
-    /* Global Style */
     .main { background-color: #000000; font-family: 'Inter', sans-serif; }
     h1, h2, h3, p { color: #ffffff; font-family: 'Lexend', sans-serif; }
     
-    /* Genesis Copper Metric */
+    /* Metrics Styling */
     div[data-testid="stMetricValue"] { 
         color: #938172 !important; 
         font-size: 2.2rem !important; 
@@ -71,7 +70,7 @@ st.markdown("""
         border: 1px solid #938172 !important; 
     }
 
-    /* Enhanced Genesis Buttons */
+    /* Buttons Styling */
     div.stButton > button {
         background-color: #18181b; 
         color: #ffffff;
@@ -91,14 +90,12 @@ st.markdown("""
         box-shadow: 0 0 15px rgba(147, 129, 114, 0.4);
     }
 
-    /* Section Title with Vertical Accent */
     .section-title { 
         color: #938172; font-size: 0.75rem; font-weight: 500; 
         text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; 
         border-left: 3px solid #938172; padding-left: 15px;
     }
     
-    /* Input field borders */
     div[data-baseweb="input"], div[data-baseweb="select"] {
         border: 1px solid #27272a !important;
         border-radius: 4px !important;
@@ -106,7 +103,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. Data Connection & Pre-processing
+# 3. Data Connection & Processing
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -119,13 +116,13 @@ if not df.empty:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-# 4. Sidebar: History Archive
+# 4. Sidebar: Original Name Restored
 with st.sidebar:
-    st.markdown("<h2 style='letter-spacing:0.1em; font-size:1.2rem;'>GENESIS LAB</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='letter-spacing:0.1em; font-size:1.2rem;'>ZONE 2 LAB</h2>", unsafe_allow_html=True)
     st.markdown("---")
     if not df.empty:
         sessions = sorted(df["회차"].unique().astype(int).tolist(), reverse=True)
-        selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
+        selected_session = st.selectbox("ARCHIVE", sessions, index=0)
         s_data = df[df["회차"] == selected_session].iloc[0]
     else: s_data = None
 
@@ -154,7 +151,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             def_hr = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_val = st.number_input(f"T + {i*5}m HR", value=def_hr, key=f"hr_genesis_{i}", step=1)
+            hr_val = st.number_input(f"T + {i*5}m HR", value=def_hr, key=f"hr_base_{i}", step=1)
             hr_inputs.append(str(int(hr_val)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -181,7 +178,6 @@ with tab_analysis:
         m3.metric("Avg Pulse", f"{int(np.mean(hr_array[2:-1]))}bpm")
         m4.metric("Efficiency Factor", f"{round(current_p / np.mean(hr_array[2:-1]), 2)}")
 
-        # [베이스] 70분 수직 낙하 그래프 (Genesis Signature Colors)
         time_x = [i*5 for i in range(len(hr_array))]
         power_y = [int(s_data['웜업파워']) if t < 10 else (current_p if t < 10 + current_dur else int(s_data['쿨다운파워'])) for t in time_x]
         
