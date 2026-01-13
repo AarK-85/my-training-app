@@ -23,7 +23,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 연결
+# 2. 데이터 연결 및 전처리
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -62,15 +62,13 @@ with tab_entry:
         f_mp = p2.number_input("본훈련 파워", value=int(s_data['본훈련파워']) if s_data is not None else 140, step=1)
         f_cp = p3.number_input("쿨다운 파워 (5분)", value=int(s_data['쿨다운파워']) if s_data is not None else 90, step=1)
         
-        # [데이터 구성 수정]
-        # 웜업: 0m, 5m, 10m (3개)
-        # 본훈련: 15m... (Dur/5 - 1개) -> 이미 10m에서 본훈련 파워 시작으로 간주
-        # 쿨다운: 본훈련종료시점, +5m (2개)
-        num_main_steps = f_duration // 5  # 예: 60분이면 12단계
-        total_points = 2 + num_main_steps + 1 + 1 # 웜업(2구간,3점) + 본훈련 + 쿨다운(1구간,2점)
+        # [포인트 계산 로직 수정]
+        # 0분~10분(웜업: 0, 5, 10), 10분~종료5분전(본훈련), 종료5분전~최종(쿨다운: +5)
+        num_main_steps = f_duration // 5
+        # 전체 데이터 포인트: 0분 포인트 포함하여 (10/5) + (f_duration/5) + (5/5) + 1
+        total_points = 2 + num_main_steps + 1 + 1 
         
         existing_hrs = str(s_data['전체심박데이터']).split(",") if s_data is not None else []
-        
         hr_inputs = []
         h_cols = st.columns(4)
         for i in range(total_points):
@@ -86,7 +84,7 @@ with tab_entry:
                 hr_inputs.append(str(int(hr_val)))
         
         if st.form_submit_button("🚀 SAVE TRAINING RECORD", use_container_width=True):
-            # 디커플링 계산 (웜업 종료인 10m(index 2)부터 쿨다운 시작점 이전까지)
+            # 디커플링용 본훈련 심박 추출 (index 2부터 마지막 전까지)
             main_hrs = [int(x) for x in hr_inputs[2:-1]]
             mid = len(main_hrs) // 2
             f_ef_val = f_mp / np.mean(main_hrs[:mid]) if len(main_hrs[:mid]) > 0 else 1
@@ -101,10 +99,9 @@ with tab_entry:
             updated_df = pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
             updated_df['날짜'] = updated_df['날짜'].astype(str)
             conn.update(data=updated_df)
-            st.success("✅ 저장되었습니다!")
             st.rerun()
 
-# --- [TAB 2: 분석 및 수직 그래프] ---
+# --- [TAB 2: 분석 결과 및 수직 그래프] ---
 with tab_analysis:
     if not df.empty and s_data is not None:
         st.markdown("### 🤖 AI Coach's Daily Briefing")
@@ -113,26 +110,27 @@ with tab_analysis:
         current_p, current_dur = int(s_data['본훈련파워']), int(s_data['본훈련시간'])
         max_hr = int(max(hr_array))
 
+        # 코칭 메시지
         if current_dec <= 8.0:
-            st.info(f"**✅ 엔진 확장 확인.** {current_dec}%로 통제가 양호하니 {current_p+5}W로 전진합시다!")
+            st.info(f"**✅ 엔진 확장 가능성이 확인되었습니다.** 디커플링({current_dec}%)이 안정적이니 다음은 **{current_p + 5}W**로 전진합시다!")
         else:
-            st.error(f"**⏳ 적응 필요.** {current_p}W를 유지하세요.")
+            st.error(f"**⏳ 적응이 더 필요합니다.** {current_p}W를 유지하며 심박을 잡으세요.")
 
         st.divider()
 
-        # [수직 파워 그래프 생성 로직]
+        # [그래프 끊김 해결 로직]
         time_x = [i*5 for i in range(len(hr_array))]
         
-        # 각 구간별 파워 할당
-        p_warm = [int(s_data['웜업파워'])] * 2 # 0~5m, 5~10m 구간
-        p_main = [current_p] * (current_dur // 5) # 본훈련 구간
-        p_cool = [int(s_data['쿨다운파워'])] # 마지막 5분 구간
-        
-        power_y = p_warm + p_main + p_cool
-        # 데이터 포인트 수 맞춤
-        power_y = power_y[:len(time_x)]
-
+        # 파워 배열을 x축(time_x)의 개수와 정확히 일치시킴
+        power_y = []
+        num_main_end = 2 + (current_dur // 5)
+        for i in range(len(time_x)):
+            if i < 2: power_y.append(int(s_data['웜업파워'])) # 0, 5분
+            elif i < num_main_end: power_y.append(current_p) # 본훈련
+            else: power_y.append(int(s_data['쿨다운파워'])) # 쿨다운 시작부터 종료까지
+            
         fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+        
         # Power (Step Chart)
         fig1.add_trace(go.Scatter(
             x=time_x, y=power_y, name="Power(W)",
@@ -155,7 +153,6 @@ with tab_trends:
         df_vol = df.copy(); df_vol['날짜'] = pd.to_datetime(df_vol['날짜'])
         weekly_v = df_vol.set_index('날짜')['본훈련시간'].resample('W').sum().reset_index()
         weekly_v['날짜'] = weekly_v['날짜'].dt.strftime('%m/%d')
-        
         st.markdown("### 📅 Weekly Training Volume")
         fig_vol = go.Figure(go.Bar(x=weekly_v['날짜'], y=weekly_v['본훈련시간'], text=(weekly_v['본훈련시간']/60).round(1), textposition='auto', marker_color='#8b5cf6'))
         fig_vol.update_layout(template="plotly_dark", height=350, margin=dict(l=10, r=10, t=30, b=10))
