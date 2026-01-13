@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Data Loading with Enhanced Stability] ---
+# --- [Data Loading: Optimized & Cached] ---
 @st.cache_data(ttl=300)
 def load_data(_conn):
     try:
@@ -17,11 +17,10 @@ def load_data(_conn):
         if df is None or df.empty:
             return pd.DataFrame()
         
-        # Clean and Format
+        # Data Cleaning
         df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce').dt.date
         df = df.dropna(subset=['날짜'])
         
-        # Numeric Force Conversion
         num_cols = ['회차', '웜업파워', '본훈련파워', '쿨다운파워', '본훈련시간', '디커플링(%)']
         for col in num_cols:
             if col in df.columns:
@@ -30,7 +29,7 @@ def load_data(_conn):
         df['회차'] = df['회차'].astype(int)
         return df.sort_values("회차", ascending=False)
     except Exception as e:
-        st.error(f"Data Load Error: {e}")
+        st.error(f"Data Sync Failed: {e}")
         return pd.DataFrame()
 
 # 2. Gemini API Setup
@@ -44,7 +43,7 @@ try:
     else: gemini_ready = False
 except: gemini_ready = False
 
-# 3. Styling
+# 3. Genesis Custom Styling
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Lexend:wght@300;500&display=swap');
@@ -70,14 +69,14 @@ with st.sidebar:
     if not df.empty:
         session_list = df["회차"].tolist()
         selected_session = st.selectbox("SESSION ARCHIVE", session_list, index=0)
-        s_data = df[df["회차"] == selected_session].iloc[0].to_dict() # Dictionary 변환으로 참조 오류 방지
+        s_data = df[df["회차"] == selected_session].iloc[0].to_dict()
     else: s_data = None
     
     if st.button("🔄 Refresh Data", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
-# 6. Main Content
+# 6. Content Tabs
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
 # --- [TAB 1: REGISTRATION] ---
@@ -89,25 +88,23 @@ with tab_entry:
     f_duration = c3.slider("Main Training Duration (min)", 15, 180, 60, step=5)
     
     p1, p2, p3 = st.columns(3)
-    f_wp = p1.number_input("Warm-up Power (W)", value=100)
+    f_wp = p1.number_input("Warm-up (W)", value=100)
     f_mp = p2.number_input("Target Main (W)", value=140)
-    f_cp = p3.number_input("Cool-down Power (W)", value=90)
+    f_cp = p3.number_input("Cool-down (W)", value=90)
 
     st.divider()
     st.markdown('<p class="section-title">Biometric Telemetry</p>', unsafe_allow_html=True)
     total_pts = ((10 + f_duration + 5) // 5) + 1
-    hr_inputs = []
-    
-    # 세션 데이터에서 기존 심박수 가져오기 로직 안전화
     existing_raw = str(s_data.get('전체심박데이터', '')) if s_data else ''
     existing_hrs = [x.strip() for x in existing_raw.split(',')] if existing_raw else []
     
+    hr_inputs = []
     h_cols = st.columns(4)
     for i in range(total_pts):
         with h_cols[i % 4]:
-            val = int(float(existing_hrs[i])) if i < len(existing_hrs) and existing_hrs[i] else 130
-            hr_val = st.number_input(f"T + {i*5}m HR", value=val, key=f"hr_v77_{i}", step=1)
-            hr_inputs.append(str(int(hr_val)))
+            hr_val = int(float(existing_hrs[i])) if i < len(existing_hrs) and existing_hrs[i] else 130
+            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v78_{i}", step=1)
+            hr_inputs.append(str(int(hr_inp)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
         main_hrs = [int(x) for x in hr_inputs[2:-1]]
@@ -119,13 +116,12 @@ with tab_entry:
         new_row = {
             "날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), 
             "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), 
-            "본훈련시간": int(f_duration), "디커플링(%)": f_dec, 
-            "전체심박데이터": ", ".join(hr_inputs)
+            "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)
         }
         updated_df = pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
         conn.update(data=updated_df)
         st.cache_data.clear()
-        st.success("Cloud Database Updated.")
+        st.success("Cloud Synced Successfully.")
         st.rerun()
 
 # --- [TAB 2: PERFORMANCE INTELLIGENCE] ---
@@ -135,8 +131,8 @@ with tab_analysis:
         
         c_dec = float(s_data['디커플링(%)'])
         c_p = int(s_data['본훈련파워'])
-        hr_raw = str(s_data['전체심박데이터']).split(',')
-        hr_array = [int(float(x)) for x in hr_raw if x.strip()]
+        hr_raw = [x for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
+        hr_array = [int(float(x)) for x in hr_raw]
         avg_hr = np.mean(hr_array[2:-1]) if len(hr_array) > 2 else 1
         avg_ef = round(c_p / avg_hr, 2)
         
@@ -144,46 +140,38 @@ with tab_analysis:
         
         st.markdown(f"""
         <div class="summary-box">
-            <p style="color:#A1A1AA; font-style:italic;">Session {int(s_data['회차'])} at {c_p}W showed a {c_dec}% decoupling. Efficiency is at {avg_ef} EF.</p>
+            <p style="color:#A1A1AA; font-style:italic; margin:0;">Efficiency: {avg_ef} EF | Stability: {c_dec}% decoupling.</p>
             <span class="recovery-badge">Recommended Recovery: {recovery}</span>
         </div>
         """, unsafe_allow_html=True)
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Target Output", f"{c_p}W")
-        m2.metric("Decoupling", f"{c_dec}%")
-        m3.metric("Avg Pulse", f"{int(avg_hr)}bpm")
-        m4.metric("Efficiency", f"{avg_ef}")
 
         col_graph, col_guide = st.columns([3, 1])
         
         with col_graph:
             time_x = [i*5 for i in range(len(hr_array))]
             main_dur = int(s_data['본훈련시간'])
-            # Power Array Logic
-            power_y = []
-            for t in time_x:
-                if t < 10: power_y.append(int(s_data['웜업파워']))
-                elif t < 10 + main_dur: power_y.append(c_p)
-                else: power_y.append(int(s_data['쿨다운파워']))
-            
+            power_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + main_dur else int(s_data['쿨다운파워'])) for t in time_x]
             ef_trend = [round(p/h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
 
+            # [Error Fix] Subplot Axes Logic
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.15,
                                 specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
 
-            # Row 1
+            # Trace 1: Power (Left Axis)
             fig.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), row=1, col=1, secondary_y=False)
+            # Trace 2: Heart Rate (Right Axis)
             fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), row=1, col=1, secondary_y=True)
-            # Row 2
+            # Trace 3: Efficiency (Lower Axis)
             fig.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=3)), row=2, col=1)
 
-            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=650, margin=dict(l=0, r=0, t=20, b=0))
+            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=650, margin=dict(l=0, r=0, t=20, b=0), showlegend=True)
             
-            # Axes Formatting
+            # [Refined Axis Update] 명시적으로 row/col/secondary_y 지정
             fig.update_yaxes(title_text="Power (W)", titlefont=dict(color="#938172"), tickfont=dict(color="#938172"), row=1, col=1, secondary_y=False)
             fig.update_yaxes(title_text="HR (bpm)", titlefont=dict(color="#F4F4F5"), tickfont=dict(color="#F4F4F5"), row=1, col=1, secondary_y=True)
             fig.update_yaxes(title_text="Efficiency (EF)", titlefont=dict(color="#FF4D00"), tickfont=dict(color="#FF4D00"), row=2, col=1)
+            fig.update_xaxes(title_text="Time (min)", row=2, col=1)
+            
             st.plotly_chart(fig, use_container_width=True)
 
         with col_guide:
@@ -191,14 +179,14 @@ with tab_analysis:
             <div style="color:#71717a; font-size:0.85rem; padding:10px; border-left:1px solid #27272a; margin-top:60px;">
             <p><b style="color:#938172;">Copper Axis</b>: Power intensity.</p>
             <p><b style="color:#F4F4F5;">White Axis</b>: Heart rate response.</p>
-            <p><b style="color:#FF4D00;">Magma Axis</b>: Efficiency Drift (Lower Chart).</p>
+            <p><b style="color:#FF4D00;">Magma Axis</b>: Efficiency drift (Stability check).</p>
             </div>
             """, unsafe_allow_html=True)
 
         if gemini_ready:
             st.divider()
-            if pr := st.chat_input("Discuss with Gemini Coach..."):
-                with st.spinner("Reviewing your laps..."):
+            if pr := st.chat_input("Ask Gemini Coach about this session..."):
+                with st.spinner("Reviewing laps..."):
                     res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {c_p}W, Decoupling {c_dec}%. User asks: {pr}")
                     st.info(res.text)
 
@@ -208,6 +196,6 @@ with tab_trends:
         st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
         fig3 = go.Figure()
         fig3.add_trace(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
-        fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal")
-        fig3.update_layout(template="plotly_dark", height=350, yaxis_title="Decoupling (%)")
+        fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal Threshold")
+        fig3.update_layout(template="plotly_dark", height=350, yaxis_title="Decoupling (%)", margin=dict(l=0, r=0, t=20, b=0))
         st.plotly_chart(fig3, use_container_width=True)
