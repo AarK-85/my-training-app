@@ -9,77 +9,80 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Performance Optimization: Data Caching] ---
-@st.cache_data(ttl=300)
-def load_data(_conn):
-    try:
-        df = _conn.read(ttl=0)
-        if df is None or df.empty:
-            return pd.DataFrame(columns=['날짜', '회차', '웜업파워', '본훈련파워', '쿨다운파워', '본훈련시간', '디커플링(%)', '전체심박데이터'])
-        
-        df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce').dt.date
-        df = df.dropna(subset=['날짜'])
-        
-        num_cols = ['회차', '웜업파워', '본훈련파워', '쿨다운파워', '본훈련시간', '디커플링(%)']
-        for col in num_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        
-        df['회차'] = df['회차'].astype(int)
-        return df.sort_values("회차", ascending=False)
-    except Exception as e:
-        st.error(f"Data Sync Failed: {e}")
-        return pd.DataFrame()
-
-# 2. Gemini API Setup
+# Gemini API Setup
 try:
     import google.generativeai as genai
+    gemini_installed = True
+except ImportError:
+    gemini_installed = False
+
+gemini_ready = False
+if gemini_installed:
     api_key = st.secrets.get("GEMINI_API_KEY")
     if api_key:
-        genai.configure(api_key=api_key)
-        ai_model = genai.GenerativeModel('models/gemini-1.5-flash')
-        gemini_ready = True
-    else: gemini_ready = False
-except: gemini_ready = False
+        try:
+            genai.configure(api_key=api_key)
+            models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            target_model = 'models/gemini-1.5-flash' if 'models/gemini-1.5-flash' in models else 'models/gemini-pro'
+            ai_model = genai.GenerativeModel(target_model)
+            gemini_ready = True
+        except: gemini_ready = False
 
-# 3. Genesis Branding Styling
+# 2. Genesis Inspired Styling
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Lexend:wght@300;500&display=swap');
     .main { background-color: #000000; font-family: 'Inter', sans-serif; }
     h1, h2, h3, p { color: #ffffff; font-family: 'Lexend', sans-serif; }
-    div[data-testid="stMetricValue"] { color: #938172 !important; font-size: 2.2rem !important; }
-    div[data-testid="stMetricLabel"] { color: #A1A1AA !important; text-transform: uppercase; font-size: 0.7rem !important; }
-    .stTabs [data-baseweb="tab-list"] { gap: 12px; background-color: #0c0c0e; padding: 8px 12px; border-radius: 8px; }
-    .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; text-transform: uppercase; padding: 0 25px; }
-    .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #938172 !important; }
+    
+    div[data-testid="stMetricValue"] { color: #938172 !important; font-size: 2.2rem !important; font-weight: 300 !important; letter-spacing: -0.03em; }
+    div[data-testid="stMetricLabel"] { color: #A1A1AA !important; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.7rem !important; }
+
+    .stTabs [data-baseweb="tab-list"] { gap: 12px; background-color: #0c0c0e; padding: 8px 12px; border-radius: 8px; border: 1px solid #1c1c1f; }
+    .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0px 25px; transition: all 0.3s ease; }
+    .stTabs [aria-selected="true"] { color: #ffffff !important; background-color: #27272a !important; border: 1px solid #938172 !important; }
+
+    div.stButton > button { background-color: #18181b; color: #ffffff; border: 1px solid #938172; border-radius: 4px; padding: 0.6rem 1.2rem; font-family: 'Lexend', sans-serif; letter-spacing: 0.1em; transition: all 0.3s ease; text-transform: uppercase; width: 100%; }
+    div.stButton > button:hover { background-color: #938172; color: #000000; box-shadow: 0 0 15px rgba(147, 129, 114, 0.4); }
+
+    .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #938172; padding-left: 15px; }
     .summary-box { background-color: #0c0c0e; border: 1px solid #1c1c1f; padding: 20px; border-radius: 8px; margin-bottom: 25px; }
-    .recovery-badge { display: inline-block; background-color: #938172; color: #000000; padding: 2px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
-    .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; border-left: 3px solid #938172; padding-left: 15px; margin: 20px 0; }
+    .summary-text { color: #A1A1AA; font-size: 0.95rem; font-weight: 300; line-height: 1.6; font-style: italic; }
+    .recovery-badge { display: inline-block; background-color: #938172; color: #000000; padding: 2px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-top: 10px; text-transform: uppercase; }
+    
+    /* 가이드 텍스트 스타일 */
+    .guide-text { color: #71717a; font-size: 0.85rem; line-height: 1.5; padding: 10px; border-left: 1px solid #27272a; }
+    .status-highlight { color: #938172; font-weight: 600; }
     </style>
     """, unsafe_allow_html=True)
 
-# 4. Data Connection
+# 3. Data Sync (베이스 로직 유지)
 conn = st.connection("gsheets", type=GSheetsConnection)
-df = load_data(conn)
+df = conn.read(ttl=0)
 
-# 5. Sidebar
+if not df.empty:
+    df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce').dt.date
+    df = df.dropna(subset=['날짜'])
+    if '회차' in df.columns:
+        df['회차'] = pd.to_numeric(df['회차'], errors='coerce').fillna(0).astype(int)
+    for col in ['웜업파워', '본훈련파워', '쿨다운파워', '본훈련시간', '디커플링(%)']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+# 4. Sidebar Navigation
 with st.sidebar:
-    st.markdown("<h2 style='letter-spacing:0.1em;'>ZONE 2 LAB</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='letter-spacing:0.1em; font-size:1.2rem;'>ZONE 2 LAB</h2>", unsafe_allow_html=True)
+    st.markdown("---")
     if not df.empty:
-        session_list = df["회차"].tolist()
-        selected_session = st.selectbox("SESSION ARCHIVE", session_list, index=0)
-        s_data = df[df["회차"] == selected_session].iloc[0].to_dict()
+        sessions = sorted(df["회차"].unique().astype(int).tolist(), reverse=True)
+        selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
+        s_data = df[df["회차"] == selected_session].iloc[0]
     else: s_data = None
-    
-    if st.button("🔄 Refresh Data", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
 
-# 6. Navigation
+# 5. Dashboard Layout
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION] ---
+# --- [TAB 1: SESSION REGISTRATION] (동일) ---
 with tab_entry:
     st.markdown('<p class="section-title">Session Configuration</p>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 2])
@@ -88,23 +91,21 @@ with tab_entry:
     f_duration = c3.slider("Main Training Duration (min)", 15, 180, 60, step=5)
     
     p1, p2, p3 = st.columns(3)
-    f_wp = p1.number_input("Warm-up (W)", value=100)
+    f_wp = p1.number_input("Warm-up Power (W)", value=100)
     f_mp = p2.number_input("Target Main (W)", value=140)
     f_cp = p3.number_input("Cool-down (W)", value=90)
 
     st.divider()
     st.markdown('<p class="section-title">Biometric Telemetry</p>', unsafe_allow_html=True)
     total_pts = ((10 + f_duration + 5) // 5) + 1
-    existing_raw = str(s_data.get('전체심박데이터', '')) if s_data else ''
-    existing_hrs = [x.strip() for x in existing_raw.split(',') if x.strip()]
-    
+    existing_hrs = str(s_data['전체심박데이터']).split(",") if s_data is not None else []
     hr_inputs = []
     h_cols = st.columns(4)
     for i in range(total_pts):
         with h_cols[i % 4]:
-            hr_val = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v83_{i}", step=1)
-            hr_inputs.append(str(int(hr_inp)))
+            def_hr = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
+            hr_val = st.number_input(f"T + {i*5}m HR", value=def_hr, key=f"hr_base_v73_{i}", step=1)
+            hr_inputs.append(str(int(hr_val)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
         main_hrs = [int(x) for x in hr_inputs[2:-1]]
@@ -112,95 +113,112 @@ with tab_entry:
         f_ef = f_mp / np.mean(main_hrs[:mid]) if mid > 0 else 0
         s_ef = f_mp / np.mean(main_hrs[mid:]) if mid > 0 else 0
         f_dec = round(((f_ef - s_ef) / f_ef) * 100, 2) if f_ef > 0 else 0
-        
-        new_row = {
-            "날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), 
-            "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), 
-            "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)
-        }
+        new_row = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)}
         updated_df = pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
-        conn.update(data=updated_df)
-        st.cache_data.clear()
-        st.success("Cloud Synced Successfully.")
-        st.rerun()
+        updated_df['회차'] = updated_df['회차'].astype(int)
+        conn.update(data=updated_df); st.success("Cloud Database Synced."); st.rerun()
 
 # --- [TAB 2: PERFORMANCE INTELLIGENCE] ---
 with tab_analysis:
-    if s_data:
+    if s_data is not None:
         st.markdown(f"### Intelligence Briefing: Session {int(s_data['회차'])}")
         
-        c_dec = float(s_data['디커플링(%)'])
-        c_p = int(s_data['본훈련파워'])
-        hr_raw = [x for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
-        hr_array = [int(float(x)) for x in hr_raw]
-        avg_hr = np.mean(hr_array[2:-1]) if len(hr_array) > 2 else 1
-        avg_ef = round(c_p / avg_hr, 2)
+        current_dec = s_data['디커플링(%)']
+        current_p = int(s_data['본훈련파워'])
+        hr_array = [int(float(x.strip())) for x in str(s_data['전체심박데이터']).split(",")]
+        avg_hr = np.mean(hr_array[2:-1])
+        avg_ef = round(current_p / avg_hr, 2)
         
-        recovery = "24 Hours" if c_dec < 5 else "36 Hours" if c_dec < 8 else "48 Hours+"
+        stability = "Optimal" if current_dec < 5 else "Moderate" if current_dec < 8 else "High Fatigue"
+        recovery_time = "24 Hours" if current_dec < 5 else "36 Hours" if current_dec < 8 else "48 Hours+"
         
         st.markdown(f"""
         <div class="summary-box">
-            <p style="color:#A1A1AA; font-style:italic; margin:0;">Efficiency: {avg_ef} EF | Stability: {c_dec}% decoupling.</p>
-            <span class="recovery-badge">Recommended Recovery: {recovery}</span>
+            <p class="summary-text">
+            Session {int(s_data['회차'])} at {current_p}W showed <b>{stability}</b> cardiac stability with a <b>{current_dec}%</b> decoupling rate. 
+            Aerobic efficiency is currently tracked at <b>{avg_ef} EF</b>.
+            </p>
+            <span class="recovery-badge">Recommended Recovery: {recovery_time}</span>
         </div>
         """, unsafe_allow_html=True)
 
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Target Output", f"{c_p}W")
-        m2.metric("Decoupling", f"{c_dec}%")
+        m1.metric("Target Output", f"{current_p}W")
+        m2.metric("Decoupling Index", f"{current_dec}%")
         m3.metric("Avg Pulse", f"{int(avg_hr)}bpm")
-        m4.metric("Efficiency", f"{avg_ef}")
+        m4.metric("Efficiency Factor", f"{avg_ef}")
 
+        # [그래프 + 설명 레이아웃]
         col_graph, col_guide = st.columns([3, 1])
         
         with col_graph:
             time_x = [i*5 for i in range(len(hr_array))]
-            main_dur = int(s_data['본훈련시간'])
-            power_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + main_dur else int(s_data['쿨다운파워'])) for t in time_x]
-            ef_trend = [round(p/h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
+            power_y = [int(s_data['웜업파워']) if t < 10 else (current_p if t < 10 + int(s_data['본훈련시간']) else int(s_data['쿨다운파워'])) for t in time_x]
+            ef_trend = [round(p / h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
 
-            # [STABLE V8.3] make_subplots 호출 시 secondary_y를 사용하되, update_yaxes를 아예 배제함
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.15,
-                                specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
-
-            fig.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), row=1, col=1, secondary_y=False)
-            fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), row=1, col=1, secondary_y=True)
-            fig.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=3)), row=2, col=1)
-
-            # [FINAL AXIS STRATEGY] 딕셔너리를 사용하여 update_layout에서 모든 축을 명시적으로 제어 (에러 원천 차단)
-            fig.update_layout(
-                template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                height=700, margin=dict(l=0, r=0, t=30, b=0), showlegend=True,
-                yaxis=dict(title=dict(text="Power (W)", font=dict(color="#938172")), tickfont=dict(color="#938172")),
-                yaxis2=dict(title=dict(text="HR (bpm)", font=dict(color="#F4F4F5")), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y", anchor="x"),
-                yaxis3=dict(title=dict(text="Efficiency (EF)", font=dict(color="#FF4D00")), tickfont=dict(color="#FF4D00")),
-                xaxis2=dict(title="Time (min)")
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
+            fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+            fig1.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
+            fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
+            fig1.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=2)), secondary_y=True)
+            fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=20, b=0), hovermode="x unified")
+            st.plotly_chart(fig1, use_container_width=True)
 
         with col_guide:
             st.markdown(f"""
-            <div style="color:#71717a; font-size:0.85rem; padding:10px; border-left:1px solid #27272a; margin-top:60px;">
-            <p><b style="color:#938172;">Copper Axis</b>: Power intensity.</p>
-            <p><b style="color:#F4F4F5;">White Axis</b>: Heart rate response.</p>
-            <p><b style="color:#FF4D00;">Magma Axis</b>: Efficiency drift (Stability check).</p>
+            <div class="guide-text">
+            <p><b style="color:#FF4D00;">Efficiency Drift (Magma Orange)</b><br>
+            It shows how much your power output 'drifts' away from your heart rate. 
+            A steady line indicates <span class="status-highlight">High Aerobic Fitness</span>. 
+            If it drops significantly, your body is working harder to maintain the same power.</p>
+            <p><b>Cardiac Decoupling</b><br>
+            Today's <b>{current_dec}%</b> means your heart rate is 
+            {"stable" if current_dec < 5 else "drifting"}. A lower percentage represents a 
+            stronger aerobic engine.</p>
             </div>
             """, unsafe_allow_html=True)
 
+        st.divider()
+        st.markdown("### :material/chat: Discussion with Gemini Coach")
         if gemini_ready:
-            st.divider()
-            if pr := st.chat_input("Discuss with Gemini Coach..."):
-                with st.spinner("Reviewing your laps..."):
-                    res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {c_p}W, Decoupling {c_dec}%. User asks: {pr}")
-                    st.info(res.text)
+            if "messages" not in st.session_state: st.session_state.messages = []
+            chat_box = st.container(height=300)
+            with chat_box:
+                for m in st.session_state.messages:
+                    with st.chat_message(m["role"]): st.markdown(m["content"])
+            if pr := st.chat_input("Have a quick chat with your coach..."):
+                st.session_state.messages.append({"role": "user", "content": pr})
+                with chat_box:
+                    with st.chat_message("user"): st.markdown(pr)
+                with st.spinner("Gemini is reviewing your laps... hang tight!"):
+                    try:
+                        res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {current_p}W, Decoupling {current_dec}%. Goal: 160W. User: {pr}")
+                        with chat_box:
+                            with st.chat_message("assistant"):
+                                st.markdown(res.text)
+                                st.session_state.messages.append({"role": "assistant", "content": res.text})
+                    except Exception as e: st.error(f"Coach is offline: {e}")
 
 # --- [TAB 3: PROGRESSION] ---
 with tab_trends:
     if not df.empty:
-        st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
-        fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
-        fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal")
-        fig3.update_layout(template="plotly_dark", height=350, yaxis_title="Decoupling (%)", margin=dict(l=0, r=0, t=20, b=0))
-        st.plotly_chart(fig3, use_container_width=True)
+        df['날짜'] = pd.to_datetime(df['날짜'])
+        
+        c_trend, c_guide2 = st.columns([3, 1])
+        
+        with c_trend:
+            st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
+            fig3 = go.Figure()
+            fig3.add_trace(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
+            fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal Threshold")
+            fig3.update_layout(template="plotly_dark", height=300)
+            st.plotly_chart(fig3, use_container_width=True)
+        
+        with c_guide2:
+            st.markdown("""
+            <div class="guide-text" style="margin-top:50px;">
+            <p><b>Progression Monitor</b><br>
+            We track your <b>stability index</b> over weeks. 
+            The goal is to keep this orange line below the <span style="color:#10b981;">green dashed line (5%)</span> 
+            even as we increase your target power toward <b>160W</b>.</p>
+            </div>
+            """, unsafe_allow_html=True)
