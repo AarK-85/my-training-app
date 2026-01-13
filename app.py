@@ -15,9 +15,8 @@ def load_data(_conn):
     try:
         df = _conn.read(ttl=0)
         if df is None or df.empty:
-            return pd.DataFrame()
+            return pd.DataFrame(columns=['날짜', '회차', '웜업파워', '본훈련파워', '쿨다운파워', '본훈련시간', '디커플링(%)', '전체심박데이터'])
         
-        # Data Cleaning
         df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce').dt.date
         df = df.dropna(subset=['날짜'])
         
@@ -96,14 +95,14 @@ with tab_entry:
     st.markdown('<p class="section-title">Biometric Telemetry</p>', unsafe_allow_html=True)
     total_pts = ((10 + f_duration + 5) // 5) + 1
     existing_raw = str(s_data.get('전체심박데이터', '')) if s_data else ''
-    existing_hrs = [x.strip() for x in existing_raw.split(',')] if existing_raw else []
+    existing_hrs = [x.strip() for x in existing_raw.split(',') if x.strip()]
     
     hr_inputs = []
     h_cols = st.columns(4)
     for i in range(total_pts):
         with h_cols[i % 4]:
-            hr_val = int(float(existing_hrs[i])) if i < len(existing_hrs) and existing_hrs[i] else 130
-            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v78_{i}", step=1)
+            hr_val = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
+            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v79_{i}", step=1)
             hr_inputs.append(str(int(hr_inp)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -145,6 +144,12 @@ with tab_analysis:
         </div>
         """, unsafe_allow_html=True)
 
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Target Output", f"{c_p}W")
+        m2.metric("Decoupling", f"{c_dec}%")
+        m3.metric("Avg Pulse", f"{int(avg_hr)}bpm")
+        m4.metric("Efficiency", f"{avg_ef}")
+
         col_graph, col_guide = st.columns([3, 1])
         
         with col_graph:
@@ -153,25 +158,25 @@ with tab_analysis:
             power_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + main_dur else int(s_data['쿨다운파워'])) for t in time_x]
             ef_trend = [round(p/h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
 
-            # [Error Fix] Subplot Axes Logic
+            # [Error Fix] More stable subplot axis handling
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.15,
                                 specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
 
-            # Trace 1: Power (Left Axis)
+            # Trace 1 & 2: Power & HR (Row 1)
             fig.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), row=1, col=1, secondary_y=False)
-            # Trace 2: Heart Rate (Right Axis)
             fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), row=1, col=1, secondary_y=True)
-            # Trace 3: Efficiency (Lower Axis)
+            # Trace 3: Efficiency (Row 2)
             fig.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=3)), row=2, col=1)
 
-            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=650, margin=dict(l=0, r=0, t=20, b=0), showlegend=True)
-            
-            # [Refined Axis Update] 명시적으로 row/col/secondary_y 지정
-            fig.update_yaxes(title_text="Power (W)", titlefont=dict(color="#938172"), tickfont=dict(color="#938172"), row=1, col=1, secondary_y=False)
-            fig.update_yaxes(title_text="HR (bpm)", titlefont=dict(color="#F4F4F5"), tickfont=dict(color="#F4F4F5"), row=1, col=1, secondary_y=True)
-            fig.update_yaxes(title_text="Efficiency (EF)", titlefont=dict(color="#FF4D00"), tickfont=dict(color="#FF4D00"), row=2, col=1)
-            fig.update_xaxes(title_text="Time (min)", row=2, col=1)
-            
+            # [Fix] Use update_layout instead of update_yaxes with complex arguments to avoid Traceback
+            fig.update_layout(
+                template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                height=650, margin=dict(l=0, r=0, t=20, b=0), showlegend=True,
+                yaxis=dict(title="Power (W)", titlefont=dict(color="#938172"), tickfont=dict(color="#938172")),
+                yaxis2=dict(title="HR (bpm)", titlefont=dict(color="#F4F4F5"), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y", anchor="x"),
+                yaxis3=dict(title="Efficiency (EF)", titlefont=dict(color="#FF4D00"), tickfont=dict(color="#FF4D00")),
+                xaxis2=dict(title="Time (min)")
+            )
             st.plotly_chart(fig, use_container_width=True)
 
         with col_guide:
@@ -185,8 +190,8 @@ with tab_analysis:
 
         if gemini_ready:
             st.divider()
-            if pr := st.chat_input("Ask Gemini Coach about this session..."):
-                with st.spinner("Reviewing laps..."):
+            if pr := st.chat_input("Discuss with Gemini Coach..."):
+                with st.spinner("Reviewing your laps..."):
                     res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {c_p}W, Decoupling {c_dec}%. User asks: {pr}")
                     st.info(res.text)
 
@@ -196,6 +201,6 @@ with tab_trends:
         st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
         fig3 = go.Figure()
         fig3.add_trace(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
-        fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal Threshold")
+        fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal")
         fig3.update_layout(template="plotly_dark", height=350, yaxis_title="Decoupling (%)", margin=dict(l=0, r=0, t=20, b=0))
         st.plotly_chart(fig3, use_container_width=True)
