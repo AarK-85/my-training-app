@@ -15,19 +15,19 @@ except ImportError:
 # 1. 페이지 설정
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# Gemini API 설정 (Secret 연동)
+# --- [Gemini API 설정: 사용자님과 확정한 Gemini Pro] ---
 gemini_ready = False
 if gemini_installed:
     api_key = st.secrets.get("GEMINI_API_KEY")
     if api_key:
         try:
             genai.configure(api_key=api_key)
-            # 가장 안정적인 모델 경로 지정
-            ai_model = genai.GenerativeModel('gemini-1.5-flash')
+            # 이미 검증된 'gemini-pro' 모델 사용
+            ai_model = genai.GenerativeModel('gemini-pro')
             gemini_ready = True
         except: gemini_ready = False
 
-# 스타일 정의
+# CSS 스타일 (다크 테마)
 st.markdown("""
     <style>
     .main { background-color: #09090b; }
@@ -38,12 +38,11 @@ st.markdown("""
         border: 1px solid #27272a; color: #a1a1aa; padding: 0px 25px;
     }
     .stTabs [aria-selected="true"] { background-color: #27272a; color: #fff; border: 1px solid #3f3f46; }
-    .stInfo, .stSuccess, .stWarning, .stError { border-radius: 12px; border: 1px solid #27272a; background-color: #18181b; }
     .section-title { color: #a1a1aa; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.05em; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 연결 및 전처리
+# 2. 데이터 연결 및 전처리 (회차 정수형 강제)
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -63,8 +62,7 @@ with st.sidebar:
         sessions = sorted(df["회차"].unique().astype(int).tolist(), reverse=True)
         selected_session = st.selectbox("조회할 회차", sessions, index=0)
         s_data = df[df["회차"] == selected_session].iloc[0]
-    else:
-        s_data = None
+    else: s_data = None
 
 # 4. 메인 화면 구성
 tab_entry, tab_analysis, tab_trends = st.tabs(["🆕 New Session", "🎯 Analysis", "📈 Trends"])
@@ -86,29 +84,26 @@ with tab_entry:
     st.markdown(f'<p class="section-title">Step 2: Heart Rate Entry</p>', unsafe_allow_html=True)
     total_pts = ((10 + f_duration + 5) // 5) + 1
     existing_hrs = str(s_data['전체심박데이터']).split(",") if s_data is not None else []
-    
     hr_inputs = []
     h_cols = st.columns(4)
     for i in range(total_pts):
         with h_cols[i % 4]:
             def_hr = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_val = st.number_input(f"{i*5}m HR", value=def_hr, key=f"hr_input_{i}", step=1)
+            hr_val = st.number_input(f"{i*5}m HR", value=def_hr, key=f"hr_final_{i}", step=1)
             hr_inputs.append(str(int(hr_val)))
 
-    if st.button("🚀 SAVE TRAINING RECORD", width='stretch'):
+    if st.button("🚀 SAVE RECORD", width='stretch'):
         main_hrs = [int(x) for x in hr_inputs[2:-1]]
         mid = len(main_hrs) // 2
         f_ef = f_mp / np.mean(main_hrs[:mid]) if mid > 0 else 0
         s_ef = f_mp / np.mean(main_hrs[mid:]) if mid > 0 else 0
         f_dec = round(((f_ef - s_ef) / f_ef) * 100, 2) if f_ef > 0 else 0
-        
         new_row = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)}
         updated_df = pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
-        updated_df['날짜'] = updated_df['날짜'].astype(str)
         updated_df['회차'] = updated_df['회차'].astype(int)
         conn.update(data=updated_df); st.success("저장 완료!"); st.rerun()
 
-# --- [TAB 2: 분석 (그래프 & 대화창 복구)] ---
+# --- [TAB 2: 분석 (70분 수직 낙하 & Gemini Pro 채팅)] ---
 with tab_analysis:
     if s_data is not None:
         st.markdown(f"### 🤖 Session {int(s_data['회차'])} AI Briefing")
@@ -121,7 +116,7 @@ with tab_analysis:
         m3.metric("Avg HR", f"{int(np.mean(hr_array[2:-1]))}bpm")
         m4.metric("EF", f"{round(current_p / np.mean(hr_array[2:-1]), 2)}")
 
-        # [수직 낙하 교정] t=70에서 즉시 하강하도록 조건문 수정
+        # [수정] 70분 정시 수직 낙하(Step-down) 로직
         time_x = [i*5 for i in range(len(hr_array))]
         power_y = []
         for t in time_x:
@@ -132,51 +127,55 @@ with tab_analysis:
         fig1 = make_subplots(specs=[[{"secondary_y": True}]])
         fig1.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#3b82f6', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(59, 130, 246, 0.1)'), secondary_y=False)
         fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ef4444', width=3, shape='spline')), secondary_y=True)
-        fig1.update_layout(template="plotly_dark", height=400, margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified")
-        st.plotly_chart(fig1, width='stretch')
+        fig1.update_layout(template="plotly_dark", height=450, margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified")
+        st.plotly_chart(fig1, use_container_width=True)
 
-        # [복구] 15분 단위 EF 분석
+        # 15분 단위 EF 바 차트
         st.markdown('<p class="section-title">Efficiency Factor Analysis (Every 15m)</p>', unsafe_allow_html=True)
         main_hr_only = hr_array[2:-1]
         ef_intervals = [round(current_p / np.mean(main_hr_only[i:i+3]), 2) for i in range(0, len(main_hr_only), 3) if len(main_hr_only[i:i+3]) > 0]
         fig2 = go.Figure(go.Bar(x=[f"{i*15}~{(i+1)*15}m" for i in range(len(ef_intervals))], y=ef_intervals, marker_color='#10b981', text=ef_intervals, textposition='auto'))
         fig2.update_layout(template="plotly_dark", height=300, yaxis_range=[min(ef_intervals)-0.1, max(ef_intervals)+0.1])
-        st.plotly_chart(fig2, width='stretch')
+        st.plotly_chart(fig2, use_container_width=True)
 
         st.divider()
-        # [완벽 복구] Gemini 채팅창
+        # [완벽 복구] Gemini Pro 채팅창
         st.markdown("### 💬 Chat with Gemini Coach")
-        if not gemini_ready:
-            st.warning("Gemini API가 활성화되지 않았습니다. Secrets를 확인하세요.")
-        else:
+        if gemini_ready:
             if "messages" not in st.session_state: st.session_state.messages = []
-            chat_box = st.container(height=300)
-            with chat_box:
+            chat_container = st.container(height=300)
+            with chat_container:
                 for m in st.session_state.messages:
                     with st.chat_message(m["role"]): st.markdown(m["content"])
-            if pr := st.chat_input("훈련에 대해 질문하세요..."):
+            if pr := st.chat_input("질문하기..."):
                 st.session_state.messages.append({"role": "user", "content": pr})
-                with chat_box:
+                with chat_container:
                     with st.chat_message("user"): st.markdown(pr)
-                res = ai_model.generate_content(f"코치 분석: {int(s_data['회차'])}회차, 파워 {current_p}W, 디커플링 {current_dec}%. 질문: {pr}")
-                with chat_box:
-                    with st.chat_message("assistant"):
-                        st.markdown(res.text)
-                        st.session_state.messages.append({"role": "assistant", "content": res.text})
+                try:
+                    res = ai_model.generate_content(f"코치 분석: {int(s_data['회차'])}회차, 파워 {current_p}W, 디커플링 {current_dec}%. 질문: {pr}")
+                    with chat_container:
+                        with st.chat_message("assistant"):
+                            st.markdown(res.text)
+                            st.session_state.messages.append({"role": "assistant", "content": res.text})
+                except Exception as e:
+                    st.error(f"채팅 에러: {e}")
+        else:
+            st.warning("Gemini API Key를 확인해주세요.")
 
-# --- [TAB 3: 트렌드 (완벽 복구)] ---
+# --- [TAB 3: 트렌드] ---
 with tab_trends:
     if not df.empty:
-        col1, col2 = st.columns(2)
         df['날짜'] = pd.to_datetime(df['날짜'])
+        col1, col2 = st.columns(2)
         with col1:
             weekly = df.set_index('날짜')['본훈련시간'].resample('W').sum().reset_index()
-            st.plotly_chart(go.Figure(go.Bar(x=weekly['날짜'], y=weekly['본훈련시간'], marker_color='#8b5cf6')).update_layout(template="plotly_dark", title="Weekly Volume (min)", height=350), width='stretch')
+            st.plotly_chart(go.Figure(go.Bar(x=weekly['날짜'], y=weekly['본훈련시간'], marker_color='#8b5cf6')).update_layout(template="plotly_dark", title="Weekly Volume (min)", height=350), use_container_width=True)
         with col2:
-            st.plotly_chart(go.Figure(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#f59e0b'))).update_layout(template="plotly_dark", title="Decoupling Trend (%)", height=350), width='stretch')
+            st.plotly_chart(go.Figure(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#f59e0b'))).update_layout(template="plotly_dark", title="Decoupling Trend (%)", height=350), use_container_width=True)
+        
         st.markdown('<p class="section-title">Power Progression (Road to 160W)</p>', unsafe_allow_html=True)
         fig5 = go.Figure()
-        fig5.add_trace(go.Scatter(x=df['날짜'], y=df['본훈련파워'], name="Power", mode='lines+markers', fill='tozeroy'))
+        fig5.add_trace(go.Scatter(x=df['날짜'], y=df['본훈련파워'], mode='lines+markers', fill='tozeroy'))
         fig5.add_hline(y=160, line_dash="dash", line_color="red", annotation_text="Goal 160W")
         fig5.update_layout(template="plotly_dark", height=350)
-        st.plotly_chart(fig5, width='stretch')
+        st.plotly_chart(fig5, use_container_width=True)
