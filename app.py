@@ -15,15 +15,15 @@ except ImportError:
 # 1. 페이지 설정
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Gemini API 설정: 에러 방지 강화] ---
+# --- [Gemini API 설정: 모델 경로 수정] ---
 gemini_ready = False
 if gemini_installed:
     api_key = st.secrets.get("GEMINI_API_KEY")
     if api_key:
         try:
             genai.configure(api_key=api_key)
-            # 가장 범용적인 모델명인 'models/gemini-1.5-flash'를 사용합니다.
-            ai_model = genai.GenerativeModel('gemini-1.5-flash')
+            # 에러 메시지의 권고에 따라 모델 경로를 'models/gemini-1.5-flash'로 명시합니다.
+            ai_model = genai.GenerativeModel('models/gemini-1.5-flash')
             gemini_ready = True
         except Exception as e:
             st.error(f"Gemini 초기화 오류: {e}")
@@ -165,20 +165,20 @@ with tab_analysis:
                 with chat_container:
                     with st.chat_message("user"): st.markdown(prompt)
                 
-                context = f"코치로서 {selected_session}회차 데이터를 분석해줘. 파워:{current_p}W, 디커플링:{current_dec}%, 심박:{hr_array}. 질문:{prompt}"
+                context = f"너는 사이클링 코치야. {selected_session}회차 훈련 데이터를 보고 분석해줘. 파워:{current_p}W, 디커플링:{current_dec}%, 심박:{hr_array}. 질문:{prompt}"
                 
                 with chat_container:
                     with st.chat_message("assistant"):
                         try:
-                            # 🚀 API 호출 및 예외 처리 강화
+                            # 🚀 'models/' 접두사를 명시한 모델 호출
                             response = ai_model.generate_content(context)
                             st.markdown(response.text)
                             st.session_state.messages.append({"role": "assistant", "content": response.text})
                         except Exception as e:
-                            st.error(f"⚠️ Gemini 응답 에러: {e}")
-                            st.info("💡 API 키가 'AI Studio'에서 활성화되었는지, 결제 정보나 지역 제한이 없는지 확인해 보세요.")
+                            st.error(f"⚠️ 모델 호출 실패: {e}")
+                            st.info("💡 만약 이 에러가 계속된다면, API 키가 'Gemini 1.5 Flash' 모델에 대해 권한이 있는지 AI Studio에서 확인해 주세요.")
 
-# --- [TAB 3: Trends] --- (이전과 동일)
+# --- [TAB 3: Trends] ---
 with tab_trends:
     if not df.empty:
         df_vol = df.copy(); df_vol['날짜'] = pd.to_datetime(df_vol['날짜'])
