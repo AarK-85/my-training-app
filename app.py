@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# 2. Genesis Magma Styling (Fixed Briefing Card Layout)
+# 2. Genesis Magma Styling
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -19,22 +19,9 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; text-transform: uppercase; padding: 0px 25px; }
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #938172 !important; }
     .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #938172; padding-left: 15px; }
-    
-    /* Fixed Briefing Card: Responsive and contained */
-    .briefing-card { 
-        border: 1px solid #27272a; 
-        padding: 22px; 
-        border-radius: 12px; 
-        background: #0c0c0e; 
-        margin-top: 10px; 
-        min-height: 160px; 
-        height: auto;
-        display: block;
-        overflow: hidden;
-        word-wrap: break-word;
-    }
+    .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; min-height: 160px; height: auto; overflow: hidden; word-wrap: break-word; }
     .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; display: inline-block; }
-    .guide-box { color: #A1A1AA; font-size: 0.85rem; line-height: 1.6; padding: 20px; border-left: 3px solid #FF4D00; background: rgba(255, 77, 0, 0.05); }
+    .delete-container { border: 1px solid #450a0a; padding: 20px; border-radius: 8px; background: #110303; margin-top: 40px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -64,7 +51,7 @@ with st.sidebar:
 # 5. Dashboard Tabs
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: SESSION REGISTRATION] ---
+# --- [TAB 1: SESSION REGISTRATION & MANAGEMENT] ---
 with tab_entry:
     st.markdown('<p class="section-title">Session Configuration</p>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 2])
@@ -83,7 +70,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             dv = int(float(hr_list[i])) if i < len(hr_list) else 130
-            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v89_{i}", step=1)
+            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v90_{i}", step=1)
             hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -93,7 +80,22 @@ with tab_entry:
         new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)}
         conn.update(data=pd.concat([df[df["회차"] != f_session], pd.DataFrame([new])], ignore_index=True).sort_values("회차")); st.rerun()
 
-# --- [TAB 2: PERFORMANCE INTELLIGENCE] ---
+    # [DATA REMOVAL SECTION]
+    st.markdown('<div class="delete-container">', unsafe_allow_html=True)
+    st.markdown('<p style="color:#ef4444; font-size:0.75rem; font-weight:600; text-transform:uppercase; margin-bottom:15px;">Data Management Zone</p>', unsafe_allow_html=True)
+    dc1, dc2 = st.columns([3, 1])
+    with dc1:
+        del_session = st.selectbox("Select Session to Delete", sorted(df["회차"].unique().tolist(), reverse=True), key="del_box", format_func=lambda x: f"Delete Session {int(x)}")
+    with dc2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("DELETE NOW", use_container_width=True):
+            updated_df = df[df["회차"] != del_session]
+            conn.update(data=updated_df)
+            st.cache_data.clear()
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --- [TAB 2: PERFORMANCE INTELLIGENCE] (v8.9 동일) ---
 with tab_analysis:
     if s_data is not None:
         st.markdown(f"### Intelligence Briefing: Session {int(s_data['회차'])}")
@@ -143,7 +145,7 @@ with tab_analysis:
         with ce2:
             st.markdown('<div class="guide-box"><b>Aerobic Stability</b><br><br>Downward slope indicates cardiac drift. Flat line means solid aerobic base.</div>', unsafe_allow_html=True)
 
-# --- [TAB 3: PROGRESSION] ---
+# --- [TAB 3: PROGRESSION] (v8.9 동일) ---
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">Road to 160W Final Goal</p>', unsafe_allow_html=True)
