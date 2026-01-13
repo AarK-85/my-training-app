@@ -11,8 +11,10 @@ st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
 # --- [Gemini API 설정] ---
 # 실제 사용 시 st.secrets["GEMINI_API_KEY"] 등으로 관리하는 것이 보안상 좋습니다.
-GEMINI_API_KEY = "AIzaSyAARH5lYJUH3EQD8hXsCPUMBpENJo3adPo" 
-genai.configure(api_key=GEMINI_API_KEY)
+# GEMINI_API_KEY = "AIzaSyAARH5lYJUH3EQD8hXsCPUMBpENJo3adPo" 
+# genai.configure(api_key=GEMINI_API_KEY)
+# GEMINI_API_KEY = "YOUR_GEMINI_API_KEY" 대신 아래 코드를 사용
+GEMINI_API_KEY = st.secrets["AIzaSyAARH5lYJUH3EQD8hXsCPUMBpENJo3adPo"]
 # 저지연 및 효율성을 위해 flash 모델을 사용합니다.
 ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
