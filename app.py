@@ -25,7 +25,7 @@ def load_data(_conn):
         df['회차'] = df['회차'].astype(int)
         return df.sort_values("회차", ascending=False)
     except Exception as e:
-        st.error(f"Data Sync Failed: {e}")
+        st.error(f"Sync Failed: {e}")
         return pd.DataFrame()
 
 # 2. Gemini API Setup
@@ -55,7 +55,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 4. Data Connection
+# 4. Connection
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = load_data(conn)
 
@@ -71,7 +71,7 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-# 6. Navigation
+# 6. Content
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
 # --- [TAB 1: REGISTRATION] ---
@@ -88,103 +88,72 @@ with tab_entry:
     st.divider()
     st.markdown('<p class="section-title">Biometric Telemetry</p>', unsafe_allow_html=True)
     total_pts = ((10 + f_duration + 5) // 5) + 1
-    existing_raw = str(s_data.get('전체심박데이터', '')) if s_data else ''
-    existing_hrs = [x.strip() for x in existing_raw.split(',') if x.strip()]
+    hr_raw = str(s_data.get('전체심박데이터', '')) if s_data else ''
+    hr_list = [x.strip() for x in hr_raw.split(',') if x.strip()]
     hr_inputs = []
     h_cols = st.columns(4)
     for i in range(total_pts):
         with h_cols[i % 4]:
-            hr_val = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v85_{i}", step=1)
+            def_val = int(float(hr_list[i])) if i < len(hr_list) else 130
+            hr_inp = st.number_input(f"T + {i*5}m", value=def_val, key=f"hr_v86_{i}", step=1)
             hr_inputs.append(str(int(hr_inp)))
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
-        main_hrs = [int(x) for x in hr_inputs[2:-1]]
-        mid = len(main_hrs) // 2
-        f_ef = f_mp / np.mean(main_hrs[:mid]) if mid > 0 else 0
-        s_ef = f_mp / np.mean(main_hrs[mid:]) if mid > 0 else 0
+        main_h = [int(x) for x in hr_inputs[2:-1]]
+        mid = len(main_h) // 2
+        f_ef = f_mp / np.mean(main_h[:mid]) if mid > 0 else 0
+        s_ef = f_mp / np.mean(main_h[mid:]) if mid > 0 else 0
         f_dec = round(((f_ef - s_ef) / f_ef) * 100, 2) if f_ef > 0 else 0
         new_row = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)}
-        updated_df = pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
-        conn.update(data=updated_df)
-        st.cache_data.clear()
-        st.success("Cloud Synced Successfully.")
-        st.rerun()
+        conn.update(data=pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차"))
+        st.cache_data.clear(); st.success("Synced."); st.rerun()
 
 # --- [TAB 2: PERFORMANCE INTELLIGENCE] ---
 with tab_analysis:
     if s_data:
         st.markdown(f"### Intelligence Briefing: Session {int(s_data['회차'])}")
         c_dec, c_p = float(s_data['디커플링(%)']), int(s_data['본훈련파워'])
-        hr_raw = [x for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
-        hr_array = [int(float(x)) for x in hr_raw]
+        hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         avg_hr = np.mean(hr_array[2:-1]) if len(hr_array) > 2 else 1
         avg_ef = round(c_p / avg_hr, 2)
         recovery = "24 Hours" if c_dec < 5 else "36 Hours" if c_dec < 8 else "48 Hours+"
         
-        st.markdown(f"""
-        <div class="summary-box">
+        st.markdown(f"""<div class="summary-box">
             <p style="color:#A1A1AA; font-style:italic; margin:0;">Efficiency: {avg_ef} EF | Stability: {c_dec}% decoupling.</p>
             <span class="recovery-badge">Recommended Recovery: {recovery}</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Target Output", f"{c_p}W")
-        m2.metric("Decoupling", f"{c_dec}%")
-        m3.metric("Avg Pulse", f"{int(avg_hr)}bpm")
-        m4.metric("Efficiency", f"{avg_ef}")
+        </div>""", unsafe_allow_html=True)
 
         col_graph, col_guide = st.columns([3, 1])
         with col_graph:
             time_x = [i*5 for i in range(len(hr_array))]
-            main_dur = int(s_data['본훈련시간'])
-            power_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + main_dur else int(s_data['쿨다운파워'])) for t in time_x]
-            ef_trend = [round(p/h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
+            p_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + int(s_data['본훈련시간']) else int(s_data['쿨다운파워'])) for t in time_x]
+            ef_y = [round(p/h, 2) if h > 0 else 0 for p, h in zip(p_y, hr_array)]
 
-            # [3단 분리 레이아웃: secondary_y 사용 중단]
-            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.07,
-                                subplot_titles=("POWER TELEMETRY", "HEART RATE TELEMETRY", "EFFICIENCY DRIFT"))
+            # [핵심] secondary_y를 완전히 제거하고 3단 독립 그래프로 구성
+            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+                                subplot_titles=("POWER (W)", "HEART RATE (BPM)", "EFFICIENCY (EF)"))
 
-            # Trace 1: Power (Copper)
-            fig.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=3, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), row=1, col=1)
-            # Trace 2: HR (White)
-            fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), row=2, col=1)
-            # Trace 3: EF Drift (Magma Orange)
-            fig.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=3)), row=3, col=1)
+            fig.add_trace(go.Scatter(x=time_x, y=p_y, name="Power", line=dict(color='#938172', width=3, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#F4F4F5', width=2, dash='dot')), row=2, col=1)
+            fig.add_trace(go.Scatter(x=time_x[2:-1], y=ef_y[2:-1], name="EF", line=dict(color='#FF4D00', width=3)), row=3, col=1)
 
-            # 레이아웃 직접 제어 (에러 원인인 update_yaxes 복합 인자 완전 제거)
-            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=800, showlegend=False, margin=dict(l=0, r=0, t=40, b=0))
-            
-            # 각 행의 Y축 스타일 직접 지정 (축 번호로 접근)
-            fig.layout.yaxis.update(title="Power (W)", titlefont=dict(color="#938172"), tickfont=dict(color="#938172"))
-            fig.layout.yaxis2.update(title="HR (bpm)", titlefont=dict(color="#F4F4F5"), tickfont=dict(color="#F4F4F5"))
-            fig.layout.yaxis3.update(title="EF Factor", titlefont=dict(color="#FF4D00"), tickfont=dict(color="#FF4D00"))
+            # 에러의 원인인 update_yaxes를 우회하고 직접 속성 할당
+            fig.update_layout(template="plotly_dark", height=800, showlegend=False, margin=dict(l=0, r=0, t=40, b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            fig.layout.yaxis.update(title="Power (W)", color="#938172")
+            fig.layout.yaxis2.update(title="HR (bpm)", color="#F4F4F5")
+            fig.layout.yaxis3.update(title="EF Factor", color="#FF4D00")
             fig.layout.xaxis3.title = "Time (min)"
             
             st.plotly_chart(fig, use_container_width=True)
 
         with col_guide:
-            st.markdown(f"""
-            <div style="color:#71717a; font-size:0.85rem; padding:10px; border-left:1px solid #27272a; margin-top:60px;">
-            <p><b style="color:#938172;">Power</b>: 상단 그래프에서 강도 확인.</p>
-            <p><b style="color:#F4F4F5;">Heart Rate</b>: 중간 그래프에서 신체 반응 확인.</p>
-            <p><b style="color:#FF4D00;">Efficiency</b>: 하단 마그마 그래프에서 유산소 안정성 정밀 분석.</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-        if gemini_ready:
-            st.divider()
-            if pr := st.chat_input("Ask Gemini Coach about this session..."):
-                with st.spinner("Reviewing laps..."):
-                    res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {c_p}W, Decoupling {c_dec}%. User asks: {pr}")
-                    st.info(res.text)
+            st.markdown(f"""<div style="color:#71717a; font-size:0.85rem; padding:10px; border-left:1px solid #27272a; margin-top:60px;">
+            <p><b style="color:#938172;">Power</b>: 상단</p><p><b style="color:#F4F4F5;">Heart Rate</b>: 중간</p><p><b style="color:#FF4D00;">Efficiency</b>: 하단 (마그마 오렌지)</p>
+            </div>""", unsafe_allow_html=True)
 
 # --- [TAB 3: PROGRESSION] ---
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
-        fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
-        fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal")
-        fig3.update_layout(template="plotly_dark", height=350, yaxis_title="Decoupling (%)", margin=dict(l=0, r=0, t=20, b=0))
+        fig3 = go.Figure(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
+        fig3.update_layout(template="plotly_dark", height=350, yaxis_title="Decoupling (%)")
         st.plotly_chart(fig3, use_container_width=True)
