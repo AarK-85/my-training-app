@@ -28,23 +28,20 @@ if gemini_installed:
             gemini_ready = True
         except: gemini_ready = False
 
-# 2. Genesis Magma Inspired Styling
+# 2. Genesis Inspired Styling
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Lexend:wght@300;500&display=swap');
     .main { background-color: #000000; font-family: 'Inter', sans-serif; }
     h1, h2, h3, p { color: #ffffff; font-family: 'Lexend', sans-serif; }
     
-    /* Metrics: Genesis Copper Accent */
     div[data-testid="stMetricValue"] { color: #938172 !important; font-size: 2.2rem !important; font-weight: 300 !important; letter-spacing: -0.03em; }
     div[data-testid="stMetricLabel"] { color: #A1A1AA !important; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.7rem !important; }
 
-    /* Tabs Styling */
     .stTabs [data-baseweb="tab-list"] { gap: 12px; background-color: #0c0c0e; padding: 8px 12px; border-radius: 8px; border: 1px solid #1c1c1f; }
     .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0px 25px; transition: all 0.3s ease; }
     .stTabs [aria-selected="true"] { color: #ffffff !important; background-color: #27272a !important; border: 1px solid #938172 !important; }
 
-    /* Interactive Buttons */
     div.stButton > button { background-color: #18181b; color: #ffffff; border: 1px solid #938172; border-radius: 4px; padding: 0.6rem 1.2rem; font-family: 'Lexend', sans-serif; letter-spacing: 0.1em; transition: all 0.3s ease; text-transform: uppercase; width: 100%; }
     div.stButton > button:hover { background-color: #938172; color: #000000; box-shadow: 0 0 15px rgba(147, 129, 114, 0.4); }
 
@@ -52,10 +49,14 @@ st.markdown("""
     .summary-box { background-color: #0c0c0e; border: 1px solid #1c1c1f; padding: 20px; border-radius: 8px; margin-bottom: 25px; }
     .summary-text { color: #A1A1AA; font-size: 0.95rem; font-weight: 300; line-height: 1.6; font-style: italic; }
     .recovery-badge { display: inline-block; background-color: #938172; color: #000000; padding: 2px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-top: 10px; text-transform: uppercase; }
+    
+    /* 가이드 텍스트 스타일 */
+    .guide-text { color: #71717a; font-size: 0.85rem; line-height: 1.5; padding: 10px; border-left: 1px solid #27272a; }
+    .status-highlight { color: #938172; font-weight: 600; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. Data Connection & Processing
+# 3. Data Sync (베이스 로직 유지)
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -81,7 +82,7 @@ with st.sidebar:
 # 5. Dashboard Layout
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: SESSION REGISTRATION] ---
+# --- [TAB 1: SESSION REGISTRATION] (동일) ---
 with tab_entry:
     st.markdown('<p class="section-title">Session Configuration</p>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 2])
@@ -103,7 +104,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             def_hr = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_val = st.number_input(f"T + {i*5}m HR", value=def_hr, key=f"hr_base_v71_{i}", step=1)
+            hr_val = st.number_input(f"T + {i*5}m HR", value=def_hr, key=f"hr_base_v73_{i}", step=1)
             hr_inputs.append(str(int(hr_val)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -128,7 +129,6 @@ with tab_analysis:
         avg_hr = np.mean(hr_array[2:-1])
         avg_ef = round(current_p / avg_hr, 2)
         
-        # Summary & Recovery Logic
         stability = "Optimal" if current_dec < 5 else "Moderate" if current_dec < 8 else "High Fatigue"
         recovery_time = "24 Hours" if current_dec < 5 else "36 Hours" if current_dec < 8 else "48 Hours+"
         
@@ -148,21 +148,34 @@ with tab_analysis:
         m3.metric("Avg Pulse", f"{int(avg_hr)}bpm")
         m4.metric("Efficiency Factor", f"{avg_ef}")
 
-        # [EF Drift Detail 시각화 그래프 - Magma Orange 적용]
-        time_x = [i*5 for i in range(len(hr_array))]
-        power_y = [int(s_data['웜업파워']) if t < 10 else (current_p if t < 10 + int(s_data['본훈련시간']) else int(s_data['쿨다운파워'])) for t in time_x]
-        ef_trend = [round(p / h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
-
-        fig1 = make_subplots(specs=[[{"secondary_y": True}]])
-        # Power Line (Genesis Copper)
-        fig1.add_trace(go.Scatter(x=time_x, y=power_y, name="Power Output", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
-        # HR Line (White)
-        fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
-        # [핵심 수정: EF Drift - Genesis Magma Orange #FF4D00 적용]
-        fig1.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Magma EF Drift", line=dict(color='#FF4D00', width=2)), secondary_y=True)
+        # [그래프 + 설명 레이아웃]
+        col_graph, col_guide = st.columns([3, 1])
         
-        fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=20, b=0), hovermode="x unified")
-        st.plotly_chart(fig1, use_container_width=True)
+        with col_graph:
+            time_x = [i*5 for i in range(len(hr_array))]
+            power_y = [int(s_data['웜업파워']) if t < 10 else (current_p if t < 10 + int(s_data['본훈련시간']) else int(s_data['쿨다운파워'])) for t in time_x]
+            ef_trend = [round(p / h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
+
+            fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+            fig1.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
+            fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
+            fig1.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=2)), secondary_y=True)
+            fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0, r=0, t=20, b=0), hovermode="x unified")
+            st.plotly_chart(fig1, use_container_width=True)
+
+        with col_guide:
+            st.markdown(f"""
+            <div class="guide-text">
+            <p><b style="color:#FF4D00;">Efficiency Drift (Magma Orange)</b><br>
+            It shows how much your power output 'drifts' away from your heart rate. 
+            A steady line indicates <span class="status-highlight">High Aerobic Fitness</span>. 
+            If it drops significantly, your body is working harder to maintain the same power.</p>
+            <p><b>Cardiac Decoupling</b><br>
+            Today's <b>{current_dec}%</b> means your heart rate is 
+            {"stable" if current_dec < 5 else "drifting"}. A lower percentage represents a 
+            stronger aerobic engine.</p>
+            </div>
+            """, unsafe_allow_html=True)
 
         st.divider()
         st.markdown("### :material/chat: Discussion with Gemini Coach")
@@ -172,11 +185,11 @@ with tab_analysis:
             with chat_box:
                 for m in st.session_state.messages:
                     with st.chat_message(m["role"]): st.markdown(m["content"])
-            if pr := st.chat_input("Ask about your HR drift or recovery..."):
+            if pr := st.chat_input("Have a quick chat with your coach..."):
                 st.session_state.messages.append({"role": "user", "content": pr})
                 with chat_box:
                     with st.chat_message("user"): st.markdown(pr)
-                with st.spinner("Coach is calculating your recovery needs..."):
+                with st.spinner("Gemini is reviewing your laps... hang tight!"):
                     try:
                         res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {current_p}W, Decoupling {current_dec}%. Goal: 160W. User: {pr}")
                         with chat_box:
@@ -185,20 +198,27 @@ with tab_analysis:
                                 st.session_state.messages.append({"role": "assistant", "content": res.text})
                     except Exception as e: st.error(f"Coach is offline: {e}")
 
-# --- [TAB 3: LONG-TERM PROGRESSION] ---
+# --- [TAB 3: PROGRESSION] ---
 with tab_trends:
     if not df.empty:
         df['날짜'] = pd.to_datetime(df['날짜'])
-        st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
-        fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
-        fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal Threshold")
-        fig3.update_layout(template="plotly_dark", height=300, title="Decoupling Over Time")
-        st.plotly_chart(fig3, use_container_width=True)
         
-        st.markdown('<p class="section-title">Strategic Progression (Target: 160W)</p>', unsafe_allow_html=True)
-        fig5 = go.Figure()
-        fig5.add_trace(go.Scatter(x=df['날짜'], y=df['본훈련파워'], mode='lines+markers', fill='tozeroy', line=dict(color='#938172')))
-        fig5.add_hline(y=160, line_dash="dash", line_color="#ef4444", annotation_text="Final Goal 160W")
-        fig5.update_layout(template="plotly_dark", height=350)
-        st.plotly_chart(fig5, use_container_width=True)
+        c_trend, c_guide2 = st.columns([3, 1])
+        
+        with c_trend:
+            st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
+            fig3 = go.Figure()
+            fig3.add_trace(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
+            fig3.add_hline(y=5.0, line_dash="dash", line_color="#10b981", annotation_text="Optimal Threshold")
+            fig3.update_layout(template="plotly_dark", height=300)
+            st.plotly_chart(fig3, use_container_width=True)
+        
+        with c_guide2:
+            st.markdown("""
+            <div class="guide-text" style="margin-top:50px;">
+            <p><b>Progression Monitor</b><br>
+            We track your <b>stability index</b> over weeks. 
+            The goal is to keep this orange line below the <span style="color:#10b981;">green dashed line (5%)</span> 
+            even as we increase your target power toward <b>160W</b>.</p>
+            </div>
+            """, unsafe_allow_html=True)
