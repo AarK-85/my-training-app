@@ -58,21 +58,25 @@ with tab_entry:
         f_duration = c3.slider("본 훈련 시간(분)", 15, 180, int(s_data['본훈련시간']) if s_data is not None else 60, step=5)
         
         p1, p2, p3 = st.columns(3)
-        f_wp = p1.number_input("웜업 파워 (10분 고정)", value=int(s_data['웜업파워']) if s_data is not None else 100, step=1)
+        f_wp = p1.number_input("웜업 파워 (10분)", value=int(s_data['웜업파워']) if s_data is not None else 100, step=1)
         f_mp = p2.number_input("본훈련 파워", value=int(s_data['본훈련파워']) if s_data is not None else 140, step=1)
-        f_cp = p3.number_input("쿨다운 파워 (5분 고정)", value=int(s_data['쿨다운파워']) if s_data is not None else 90, step=1)
+        f_cp = p3.number_input("쿨다운 파워 (5분)", value=int(s_data['쿨다운파워']) if s_data is not None else 90, step=1)
         
-        # 입력창 구성: 웜업(10분=2개) + 본훈련(Dur/5개) + 쿨다운(5분=1개)
-        num_main = f_duration // 5
-        total_steps = 2 + num_main + 1
+        # [데이터 구성 수정]
+        # 웜업: 0m, 5m, 10m (3개)
+        # 본훈련: 15m... (Dur/5 - 1개) -> 이미 10m에서 본훈련 파워 시작으로 간주
+        # 쿨다운: 본훈련종료시점, +5m (2개)
+        num_main_steps = f_duration // 5  # 예: 60분이면 12단계
+        total_points = 2 + num_main_steps + 1 + 1 # 웜업(2구간,3점) + 본훈련 + 쿨다운(1구간,2점)
+        
         existing_hrs = str(s_data['전체심박데이터']).split(",") if s_data is not None else []
         
         hr_inputs = []
         h_cols = st.columns(4)
-        for i in range(total_steps):
+        for i in range(total_points):
             t_min = i * 5
-            if i < 2: label = f"🟢 웜업 {t_min}m"
-            elif i < 2 + num_main: label = f"🔵 본훈련 {t_min}m"
+            if i <= 2: label = f"🟢 웜업 {t_min}m"
+            elif i <= 2 + (num_main_steps - 1): label = f"🔵 본훈련 {t_min}m"
             else: label = f"⚪ 쿨다운 {t_min}m"
             
             try: def_hr = int(float(existing_hrs[i].strip()))
@@ -82,7 +86,7 @@ with tab_entry:
                 hr_inputs.append(str(int(hr_val)))
         
         if st.form_submit_button("🚀 SAVE TRAINING RECORD", use_container_width=True):
-            # 디커플링 계산 로직 (웜업 2개 제외, 본훈련 데이터만 추출)
+            # 디커플링 계산 (웜업 종료인 10m(index 2)부터 쿨다운 시작점 이전까지)
             main_hrs = [int(x) for x in hr_inputs[2:-1]]
             mid = len(main_hrs) // 2
             f_ef_val = f_mp / np.mean(main_hrs[:mid]) if len(main_hrs[:mid]) > 0 else 1
@@ -100,7 +104,7 @@ with tab_entry:
             st.success("✅ 저장되었습니다!")
             st.rerun()
 
-# --- [TAB 2: 분석 결과 및 수직 그래프] ---
+# --- [TAB 2: 분석 및 수직 그래프] ---
 with tab_analysis:
     if not df.empty and s_data is not None:
         st.markdown("### 🤖 AI Coach's Daily Briefing")
@@ -109,26 +113,34 @@ with tab_analysis:
         current_p, current_dur = int(s_data['본훈련파워']), int(s_data['본훈련시간'])
         max_hr = int(max(hr_array))
 
-        # 코칭 로직 (5.8% 상향 제안 포함)
-        if current_dec <= 5.0: st.success(f"**🔥 유산소 제어 완벽.** {current_p+5}W로 상향 제안!")
-        elif current_dec <= 8.0: st.info(f"**✅ 엔진 확장 확인.** {current_dec}%로 5%를 약간 넘었지만, 통제력이 좋으니 {current_p+5}W로 전진합시다!")
-        else: st.error(f"**⏳ 적응 필요.** {current_p}W를 유지하며 심박을 먼저 잡으세요.")
+        if current_dec <= 8.0:
+            st.info(f"**✅ 엔진 확장 확인.** {current_dec}%로 통제가 양호하니 {current_p+5}W로 전진합시다!")
+        else:
+            st.error(f"**⏳ 적응 필요.** {current_p}W를 유지하세요.")
 
         st.divider()
 
-        # 수직 파워 그래프 데이터 (Step Chart Logic)
+        # [수직 파워 그래프 생성 로직]
         time_x = [i*5 for i in range(len(hr_array))]
-        p_warm = [int(s_data['웜업파워'])] * 2
-        p_main = [current_p] * (current_dur // 5)
-        p_cool = [int(s_data['쿨다운파워'])]
-        power_y = (p_warm + p_main + p_cool)[:len(time_x)]
+        
+        # 각 구간별 파워 할당
+        p_warm = [int(s_data['웜업파워'])] * 2 # 0~5m, 5~10m 구간
+        p_main = [current_p] * (current_dur // 5) # 본훈련 구간
+        p_cool = [int(s_data['쿨다운파워'])] # 마지막 5분 구간
+        
+        power_y = p_warm + p_main + p_cool
+        # 데이터 포인트 수 맞춤
+        power_y = power_y[:len(time_x)]
 
         fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+        # Power (Step Chart)
         fig1.add_trace(go.Scatter(
             x=time_x, y=power_y, name="Power(W)",
             line=dict(color='#3b82f6', width=4, shape='hv'),
             fill='tozeroy', fillcolor='rgba(59, 130, 246, 0.1)'
         ), secondary_y=False)
+        
+        # HR (Smooth Line)
         fig1.add_trace(go.Scatter(
             x=time_x, y=hr_array, name="HR(BPM)",
             line=dict(color='#ef4444', width=3, shape='spline')
