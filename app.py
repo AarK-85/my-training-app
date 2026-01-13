@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# 2. Genesis Magma Styling
+# 2. Genesis Magma Styling (Fixed Briefing Card Layout)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -19,8 +19,21 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; text-transform: uppercase; padding: 0px 25px; }
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #938172 !important; }
     .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #938172; padding-left: 15px; }
-    .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; height: 180px; display: flex; flex-direction: column; justify-content: flex-start; }
-    .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; width: fit-content; }
+    
+    /* Fixed Briefing Card: Responsive and contained */
+    .briefing-card { 
+        border: 1px solid #27272a; 
+        padding: 22px; 
+        border-radius: 12px; 
+        background: #0c0c0e; 
+        margin-top: 10px; 
+        min-height: 160px; 
+        height: auto;
+        display: block;
+        overflow: hidden;
+        word-wrap: break-word;
+    }
+    .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; display: inline-block; }
     .guide-box { color: #A1A1AA; font-size: 0.85rem; line-height: 1.6; padding: 20px; border-left: 3px solid #FF4D00; background: rgba(255, 77, 0, 0.05); }
     </style>
     """, unsafe_allow_html=True)
@@ -70,7 +83,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             dv = int(float(hr_list[i])) if i < len(hr_list) else 130
-            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v88_{i}", step=1)
+            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v89_{i}", step=1)
             hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -88,27 +101,25 @@ with tab_analysis:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         avg_ef = round(c_p / np.mean(hr_array[2:-1]), 2)
         
-        # [Prescription Logic: Precise 140W Transition]
         if c_dec < 6.0 and c_dur >= 60:
-            next_p = c_p + 5 if c_p < 160 else 160 # 5W 단위 정교한 상향
+            next_p = c_p + 5 if c_p < 160 else 160
             next_instruct = f"Enter {next_p}W Zone"
-            focus_msg = f"Solid base at {c_p}W confirmed. Moving to next 5W increment."
+            focus_msg = f"Solid base confirmed. Moving to next 5W increment."
         else:
             next_instruct = f"Re-confirm {c_p}W"
-            focus_msg = "Stabilize decoupling below 5% before increment."
+            focus_msg = "Stabilize decoupling below 6% before increment."
 
         st.markdown('<p class="section-title">AI Performance & Next Prescription</p>', unsafe_allow_html=True)
         brief_col1, brief_col2 = st.columns(2)
         with brief_col1:
             st.markdown(f"""<div class="briefing-card"><span class="prescription-badge">CURRENT RESULT</span>
-            <b>Session {int(s_data['회차'])}: {c_p}W / {c_dur}m</b><br>
-            Efficiency Factor: <b>{avg_ef} EF</b><br>Decoupling: <b>{c_dec}%</b></div>""", unsafe_allow_html=True)
+            <p style="margin:0; font-weight:600;">Session {int(s_data['회차'])}: {c_p}W / {c_dur}m</p>
+            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Efficiency: <b>{avg_ef} EF</b><br>Decoupling: <b>{c_dec}%</b></p></div>""", unsafe_allow_html=True)
         with brief_col2:
             st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT PRESCRIPTION</span>
-            <b>Target: {next_instruct}</b><br>
-            <b>Note:</b> {focus_msg}</div>""", unsafe_allow_html=True)
+            <p style="margin:0; font-weight:600;">Target: {next_instruct}</p>
+            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Note: {focus_msg}</p></div>""", unsafe_allow_html=True)
 
-        # 2. Power & HR Graph
         st.markdown('<p class="section-title">Power & Heart Rate Correlation</p>', unsafe_allow_html=True)
         time_x = [i*5 for i in range(len(hr_array))]
         p_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + int(s_data['본훈련시간']) else int(s_data['쿨다운파워'])) for t in time_x]
@@ -120,7 +131,6 @@ with tab_analysis:
         fig1.layout.yaxis2.update(title=dict(text="HR (bpm)", font=dict(color="#F4F4F5")), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y")
         st.plotly_chart(fig1, use_container_width=True)
 
-        # 3. Efficiency Drift Analysis
         st.markdown('<p class="section-title">Efficiency Drift Analysis</p>', unsafe_allow_html=True)
         ce1, ce2 = st.columns([3, 1])
         with ce1:
