@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Gemini API Setup: Auto-Matching System] ---
+# --- [Gemini API Setup: Auto-Matching] ---
 gemini_ready = False
 try:
     import google.generativeai as genai
@@ -24,10 +24,10 @@ try:
 except:
     gemini_ready = False
 
-# 2. Genesis Inspired Styling (Standardized to English)
+# 2. Genesis Inspired Styling
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Lexend:wght@300;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
     .main { background-color: #000000; font-family: 'Inter', sans-serif; }
     h1, h2, h3, p { color: #ffffff; font-family: 'Lexend', sans-serif; }
     div[data-testid="stMetricValue"] { color: #938172 !important; font-size: 2.2rem !important; }
@@ -36,7 +36,7 @@ st.markdown("""
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #938172 !important; }
     .summary-box { background-color: #0c0c0e; border: 1px solid #1c1c1f; padding: 25px; border-radius: 12px; margin-bottom: 25px; }
     .recovery-badge { display: inline-block; background-color: #938172; color: #000000; padding: 4px 12px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-top: 15px; text-transform: uppercase; }
-    .guide-text { color: #71717a; font-size: 0.85rem; line-height: 1.6; padding: 15px; border-left: 1px solid #27272a; background: rgba(24, 24, 27, 0.5); }
+    .guide-box { color: #A1A1AA; font-size: 0.85rem; line-height: 1.6; padding: 20px; border-left: 3px solid #FF4D00; background: rgba(255, 77, 0, 0.05); border-radius: 0 8px 8px 0; }
     .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #938172; padding-left: 15px; }
     </style>
     """, unsafe_allow_html=True)
@@ -63,7 +63,7 @@ with st.sidebar:
     if st.button("🔄 REFRESH DATASET"):
         st.cache_data.clear(); st.rerun()
 
-# 5. Dashboard Tabs (All English)
+# 5. Dashboard Tabs
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
 # --- [TAB 1: SESSION REGISTRATION] ---
@@ -75,6 +75,7 @@ with tab_entry:
     f_duration = c3.slider("Main Training Duration (min)", 15, 180, 60, step=5)
     p1, p2, p3 = st.columns(3)
     f_wp = p1.number_input("Warm-up (W)", value=100); f_mp = p2.number_input("Target Main (W)", value=140); f_cp = p3.number_input("Cool-down (W)", value=90)
+    
     st.divider()
     st.markdown('<p class="section-title">Biometric Telemetry</p>', unsafe_allow_html=True)
     total_pts = ((10 + f_duration + 5) // 5) + 1
@@ -84,8 +85,9 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             dv = int(float(hr_list[i])) if i < len(hr_list) else 130
-            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v78_{i}", step=1)
+            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v79_{i}", step=1)
             hr_inputs.append(str(int(hv)))
+    
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
         m_hrs = [int(x) for x in hr_inputs[2:-1]]; mid = len(m_hrs) // 2
         f_ef = f_mp / np.mean(m_hrs[:mid]) if mid > 0 else 0; s_ef = f_mp / np.mean(m_hrs[mid:]) if mid > 0 else 0
@@ -104,7 +106,7 @@ with tab_analysis:
         
         st.markdown(f"""<div class="summary-box"><p class="summary-text" style="color:#A1A1AA;">Session {int(s_data['회차'])} ({c_p}W): <b>{c_dec}%</b> decoupling | <b>{avg_ef} EF</b></p><span class="recovery-badge">Recommended Recovery: {recovery}</span></div>""", unsafe_allow_html=True)
 
-        # 1. Main Visual: Power & HR
+        # 1. Power & HR Telemetry
         st.markdown('<p class="section-title">Power & Heart Rate Correlation</p>', unsafe_allow_html=True)
         time_x = [i*5 for i in range(len(hr_array))]
         power_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + int(s_data['본훈련시간']) else int(s_data['쿨다운파워'])) for t in time_x]
@@ -112,9 +114,11 @@ with tab_analysis:
         fig1 = make_subplots(specs=[[{"secondary_y": True}]])
         fig1.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
         fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
+        
+        # [Error Fix] Avoiding update_yaxes secondary_y collision
         fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
-        fig1.update_yaxes(title_text="Power (W)", titlefont=dict(color="#938172"), tickfont=dict(color="#938172"), secondary_y=False)
-        fig1.update_yaxes(title_text="HR (bpm)", titlefont=dict(color="#F4F4F5"), tickfont=dict(color="#F4F4F5"), secondary_y=True)
+        fig1.layout.yaxis.update(title=dict(text="Power (W)", font=dict(color="#938172")), tickfont=dict(color="#938172"))
+        fig1.layout.yaxis2.update(title=dict(text="HR (bpm)", font=dict(color="#F4F4F5")), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y")
         st.plotly_chart(fig1, use_container_width=True)
 
         # 2. Efficiency Drift Analysis (Side-by-side)
@@ -126,23 +130,23 @@ with tab_analysis:
             fig2 = go.Figure()
             fig2.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="EF Factor", line=dict(color='#FF4D00', width=3), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
             fig2.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
-            fig2.update_yaxes(title_text="EF Factor", titlefont=dict(color="#FF4D00"), tickfont=dict(color="#FF4D00"))
+            fig2.layout.yaxis.update(title=dict(text="EF Factor", font=dict(color="#FF4D00")), tickfont=dict(color="#FF4D00"))
             st.plotly_chart(fig2, use_container_width=True)
 
         with col_ef_guide:
             st.markdown(f"""
-            <div class="guide-text" style="border-left: 3px solid #FF4D00; background: rgba(255, 77, 0, 0.02);">
-            <b style="color:#FF4D00;">Efficiency Drift Guide</b><br><br>
-            The slope of this chart indicates the stability of your aerobic engine.<br><br>
-            A flat or slightly increasing line means high efficiency. A downward trend signals cardiac drift and accumulating fatigue.
+            <div class="guide-box">
+            <b style="color:#FF4D00; font-size: 0.9rem;">Efficiency Drift Guide</b><br><br>
+            The slope of this chart reveals the <b>metabolic stability</b> of your cardiovascular system.<br><br>
+            A steady line indicates efficient aerobic metabolism. A downward trend suggests "Cardiac Drift," where heart rate rises (and efficiency falls) to maintain the same power output.
             </div>
             """, unsafe_allow_html=True)
 
         if gemini_ready:
             st.markdown('<p class="section-title">Gemini Performance Coach</p>', unsafe_allow_html=True)
-            if pr := st.chat_input("Ask Coach..."):
+            if pr := st.chat_input("Ask Coach about this session..."):
                 with st.spinner("Analyzing..."):
-                    res = ai_model.generate_content(f"Session {int(s_data['회차'])}, {c_p}W, {c_dec}% decoupling. {pr}")
+                    res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, {c_p}W, {c_dec}% decoupling. User: {pr}")
                     with st.chat_message("assistant", avatar="https://www.gstatic.com/lamda/images/gemini_sparkle_v002.svg"):
                         st.write(res.text)
 
@@ -150,7 +154,7 @@ with tab_analysis:
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
-        fig_t = go.Figure(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
+        fig_t = go.Figure(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
         fig_t.update_layout(template="plotly_dark", height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        fig_t.update_yaxes(title_text="Decoupling (%)")
+        fig_t.layout.yaxis.update(title=dict(text="Decoupling (%)"))
         st.plotly_chart(fig_t, use_container_width=True)
