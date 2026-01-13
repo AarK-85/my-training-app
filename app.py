@@ -15,16 +15,21 @@ except ImportError:
 # 1. 페이지 설정
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# Gemini API 설정
+# --- [Gemini API 설정: Secrets 연동 강화] ---
 gemini_ready = False
 if gemini_installed:
-    if "GEMINI_API_KEY" in st.secrets:
+    # Secrets 키 대소문자 구분 없이 확인하기 위해 처리
+    secrets_keys = [k.upper() for k in st.secrets.keys()]
+    if "GEMINI_API_KEY" in secrets_keys or "GEMINI_API_KEY" in st.secrets:
         try:
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            ai_model = genai.GenerativeModel('gemini-1.5-flash')
-            gemini_ready = True
-        except Exception:
-            gemini_ready = False
+            # st.secrets["GEMINI_API_KEY"] 가 존재하는지 확인
+            api_key = st.secrets.get("GEMINI_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
+                ai_model = genai.GenerativeModel('gemini-1.5-flash')
+                gemini_ready = True
+        except Exception as e:
+            st.error(f"Gemini 설정 중 오류 발생: {e}")
 
 # 스타일 정의
 st.markdown("""
@@ -53,7 +58,7 @@ if not df.empty:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-# 3. 사이드바 (History)
+# 3. 사이드바
 with st.sidebar:
     st.markdown("### 🔍 History")
     if not df.empty:
@@ -72,8 +77,6 @@ with tab_entry:
     c1, c2, c3 = st.columns([1, 1, 2])
     f_date = c1.date_input("날짜", value=pd.to_datetime(s_data['날짜']) if s_data is not None else pd.Timestamp.now().date())
     f_session = c2.number_input("회차", value=int(df["회차"].max() + 1) if not df.empty else 1, step=1)
-    
-    # 슬라이더 조절 즉시 아래 입력창 개수가 변합니다.
     f_duration = c3.slider("본 훈련 시간(분) 설정", 15, 180, int(s_data['본훈련시간']) if s_data is not None else 60, step=5)
     
     p1, p2, p3 = st.columns(3)
@@ -103,8 +106,6 @@ with tab_entry:
             hr_inputs.append(str(int(hr_val)))
 
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    # [수정] use_container_width=True -> width='stretch'
     if st.button("🚀 SAVE TRAINING RECORD", width='stretch'):
         main_hrs = [int(x) for x in hr_inputs[2:-1]]
         mid = len(main_hrs) // 2
@@ -158,9 +159,10 @@ with tab_analysis:
         st.divider()
         st.markdown("### 💬 Chat with Gemini Coach")
         if not gemini_installed:
-            st.error("`google-generativeai` 라이브러리 설치가 필요합니다. `requirements.txt`에 `google-generativeai`를 추가하세요.")
+            st.error("`google-generativeai` 라이브러리 설치가 필요합니다.")
         elif not gemini_ready:
-            st.warning("Streamlit Secrets에 `GEMINI_API_KEY`를 설정해 주세요.")
+            # Secrets에 키가 제대로 없을 때 실제 등록된 키 목록을 보여줘서 디버깅을 돕습니다.
+            st.warning(f"Secrets에서 `GEMINI_API_KEY`를 찾을 수 없습니다. 현재 등록된 키: {list(st.secrets.keys())}")
         else:
             if "messages" not in st.session_state: st.session_state.messages = []
             chat_container = st.container(height=300)
@@ -168,12 +170,12 @@ with tab_analysis:
                 for msg in st.session_state.messages:
                     with st.chat_message(msg["role"]): st.markdown(msg["content"])
             
-            if prompt := st.chat_input("Gemini에게 질문하세요..."):
+            if prompt := st.chat_input("질문을 입력하세요..."):
                 st.session_state.messages.append({"role": "user", "content": prompt})
                 with chat_container:
                     with st.chat_message("user"): st.markdown(prompt)
                 
-                context = f"코치로서 {selected_session}회차 데이터를 분석해줘. 파워:{current_p}W, 디커플링:{current_dec}%, 심박:{hr_array}. 질문:{prompt}"
+                context = f"사이클링 코치로서 {selected_session}회차 데이터를 분석해줘. 파워:{current_p}W, 디커플링:{current_dec}%, 심박:{hr_array}. 질문:{prompt}"
                 with chat_container:
                     with st.chat_message("assistant"):
                         response = ai_model.generate_content(context)
