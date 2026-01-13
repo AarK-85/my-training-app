@@ -6,10 +6,10 @@ from plotly.subplots import make_subplots
 import numpy as np
 from datetime import datetime
 
-# 1. Page Configuration - Original Name Restored
+# 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# Gemini API Setup (Base Reference: Auto-Matching System)
+# Gemini API Setup
 try:
     import google.generativeai as genai
     gemini_installed = True
@@ -28,82 +28,29 @@ if gemini_installed:
             gemini_ready = True
         except: gemini_ready = False
 
-# 2. Styling (Elegant Dark Theme with Copper Accents)
+# 2. Styling (Genesis Inspired)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Lexend:wght@300;500&display=swap');
-
     .main { background-color: #000000; font-family: 'Inter', sans-serif; }
     h1, h2, h3, p { color: #ffffff; font-family: 'Lexend', sans-serif; }
     
-    /* Metrics Styling */
-    div[data-testid="stMetricValue"] { 
-        color: #938172 !important; 
-        font-size: 2.2rem !important; 
-        font-weight: 300 !important;
-        letter-spacing: -0.03em;
-    }
-    div[data-testid="stMetricLabel"] { 
-        color: #A1A1AA !important; 
-        text-transform: uppercase; 
-        letter-spacing: 0.1em;
-        font-size: 0.7rem !important;
-    }
+    div[data-testid="stMetricValue"] { color: #938172 !important; font-size: 2.2rem !important; font-weight: 300 !important; letter-spacing: -0.03em; }
+    div[data-testid="stMetricLabel"] { color: #A1A1AA !important; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.7rem !important; }
 
-    /* Tabs Styling: Box-style for clear distinction */
-    .stTabs [data-baseweb="tab-list"] { 
-        gap: 12px; 
-        background-color: #0c0c0e; 
-        padding: 8px 12px; 
-        border-radius: 8px;
-        border: 1px solid #1c1c1f;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 45px; background-color: #18181b; 
-        border: 1px solid #27272a; border-radius: 4px;
-        color: #71717a; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase;
-        padding: 0px 25px; transition: all 0.3s ease;
-    }
-    .stTabs [aria-selected="true"] { 
-        color: #ffffff !important; 
-        background-color: #27272a !important;
-        border: 1px solid #938172 !important; 
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 12px; background-color: #0c0c0e; padding: 8px 12px; border-radius: 8px; border: 1px solid #1c1c1f; }
+    .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0px 25px; transition: all 0.3s ease; }
+    .stTabs [aria-selected="true"] { color: #ffffff !important; background-color: #27272a !important; border: 1px solid #938172 !important; }
 
-    /* Buttons Styling */
-    div.stButton > button {
-        background-color: #18181b; 
-        color: #ffffff;
-        border: 1px solid #938172; 
-        border-radius: 4px;
-        padding: 0.6rem 1.2rem;
-        font-family: 'Lexend', sans-serif;
-        letter-spacing: 0.1em;
-        transition: all 0.3s ease;
-        text-transform: uppercase;
-        width: 100%;
-        margin-top: 10px;
-    }
-    div.stButton > button:hover {
-        background-color: #938172;
-        color: #000000;
-        box-shadow: 0 0 15px rgba(147, 129, 114, 0.4);
-    }
+    div.stButton > button { background-color: #18181b; color: #ffffff; border: 1px solid #938172; border-radius: 4px; padding: 0.6rem 1.2rem; font-family: 'Lexend', sans-serif; letter-spacing: 0.1em; transition: all 0.3s ease; text-transform: uppercase; width: 100%; }
+    div.stButton > button:hover { background-color: #938172; color: #000000; box-shadow: 0 0 15px rgba(147, 129, 114, 0.4); }
 
-    .section-title { 
-        color: #938172; font-size: 0.75rem; font-weight: 500; 
-        text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; 
-        border-left: 3px solid #938172; padding-left: 15px;
-    }
-    
-    div[data-baseweb="input"], div[data-baseweb="select"] {
-        border: 1px solid #27272a !important;
-        border-radius: 4px !important;
-    }
+    .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #938172; padding-left: 15px; }
+    .summary-text { color: #A1A1AA; font-size: 0.95rem; font-weight: 300; line-height: 1.6; margin-bottom: 25px; font-style: italic; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. Data Connection & Processing
+# 3. Data Sync Logic
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -116,17 +63,17 @@ if not df.empty:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-# 4. Sidebar: Original Name Restored
+# 4. Sidebar Navigation
 with st.sidebar:
     st.markdown("<h2 style='letter-spacing:0.1em; font-size:1.2rem;'>ZONE 2 LAB</h2>", unsafe_allow_html=True)
     st.markdown("---")
     if not df.empty:
         sessions = sorted(df["회차"].unique().astype(int).tolist(), reverse=True)
-        selected_session = st.selectbox("ARCHIVE", sessions, index=0)
+        selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
         s_data = df[df["회차"] == selected_session].iloc[0]
     else: s_data = None
 
-# 5. Main Content Navigation
+# 5. Dashboard Layout
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
 # --- [TAB 1: SESSION REGISTRATION] ---
@@ -135,7 +82,7 @@ with tab_entry:
     c1, c2, c3 = st.columns([1, 1, 2])
     f_date = c1.date_input("Date", value=datetime.now().date())
     f_session = c2.number_input("Session No.", value=int(df["회차"].max() + 1) if not df.empty else 1, step=1)
-    f_duration = c3.slider("Main Interval (min)", 15, 180, 60, step=5)
+    f_duration = c3.slider("Main Training Duration (min)", 15, 180, 60, step=5)
     
     p1, p2, p3 = st.columns(3)
     f_wp = p1.number_input("Warm-up Power (W)", value=100)
@@ -151,7 +98,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             def_hr = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_val = st.number_input(f"T + {i*5}m HR", value=def_hr, key=f"hr_base_{i}", step=1)
+            hr_val = st.number_input(f"T + {i*5}m HR", value=def_hr, key=f"hr_base_v6_{i}", step=1)
             hr_inputs.append(str(int(hr_val)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -169,17 +116,32 @@ with tab_entry:
 with tab_analysis:
     if s_data is not None:
         st.markdown(f"### Intelligence Briefing: Session {int(s_data['회차'])}")
+        
+        # [추가] 훈련 데이터 기반 자동 요약 브리핑 (Short & Concise)
+        current_dec = s_data['디커플링(%)']
+        current_p = int(s_data['본훈련파워'])
         hr_array = [int(float(x.strip())) for x in str(s_data['전체심박데이터']).split(",")]
-        current_dec, current_p, current_dur = s_data['디커플링(%)'], int(s_data['본훈련파워']), int(s_data['본훈련시간'])
+        avg_ef = round(current_p / np.mean(hr_array[2:-1]), 2)
+        
+        # 위트 있고 간결한 요약 로직
+        stability = "High" if current_dec < 5 else "Moderate" if current_dec < 8 else "Fatigue Alert"
+        efficiency = "Peak" if avg_ef > 1.1 else "Solid" if avg_ef > 0.9 else "Improving"
+        
+        st.markdown(f"""
+        <p class="summary-text">
+        Today's session maintained <b>{current_p}W</b> with <b>{stability}</b> stability ({current_dec}% decoupling). 
+        Efficiency remains <b>{efficiency}</b> ({avg_ef} EF). Aerobic engine is responding well.
+        </p>
+        """, unsafe_allow_html=True)
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Target Output", f"{current_p}W")
         m2.metric("Decoupling Index", f"{current_dec}%")
         m3.metric("Avg Pulse", f"{int(np.mean(hr_array[2:-1]))}bpm")
-        m4.metric("Efficiency Factor", f"{round(current_p / np.mean(hr_array[2:-1]), 2)}")
+        m4.metric("Efficiency Factor", f"{avg_ef}")
 
         time_x = [i*5 for i in range(len(hr_array))]
-        power_y = [int(s_data['웜업파워']) if t < 10 else (current_p if t < 10 + current_dur else int(s_data['쿨다운파워'])) for t in time_x]
+        power_y = [int(s_data['웜업파워']) if t < 10 else (current_p if t < 10 + int(s_data['본훈련시간']) else int(s_data['쿨다운파워'])) for t in time_x]
         
         fig1 = make_subplots(specs=[[{"secondary_y": True}]])
         fig1.add_trace(go.Scatter(x=time_x, y=power_y, name="Power Output (W)", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
@@ -195,25 +157,25 @@ with tab_analysis:
         st.plotly_chart(fig2, use_container_width=True)
 
         st.divider()
-        st.markdown("### :material/chat: Gemini Intelligence")
+        st.markdown("### :material/chat: Discussion with Gemini Coach")
         if gemini_ready:
             if "messages" not in st.session_state: st.session_state.messages = []
             chat_box = st.container(height=300)
             with chat_box:
                 for m in st.session_state.messages:
                     with st.chat_message(m["role"]): st.markdown(m["content"])
-            if pr := st.chat_input("Inquire about performance patterns..."):
+            if pr := st.chat_input("Have a quick chat with your coach..."):
                 st.session_state.messages.append({"role": "user", "content": pr})
                 with chat_box:
                     with st.chat_message("user"): st.markdown(pr)
-                with st.spinner("Analyzing Telemetry Data..."):
+                with st.spinner("Gemini is reviewing your laps... hang tight!"):
                     try:
                         res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {current_p}W, Decoupling {current_dec}%. User: {pr}")
                         with chat_box:
                             with st.chat_message("assistant"):
                                 st.markdown(res.text)
                                 st.session_state.messages.append({"role": "assistant", "content": res.text})
-                    except Exception as e: st.error(f"Analysis Failed: {e}")
+                    except Exception as e: st.error(f"Coach is busy: {e}")
 
 # --- [TAB 3: LONG-TERM PROGRESSION] ---
 with tab_trends:
@@ -222,7 +184,7 @@ with tab_trends:
         col1, col2 = st.columns(2)
         with col1:
             weekly = df.set_index('날짜')['본훈련시간'].resample('W').sum().reset_index()
-            st.plotly_chart(go.Figure(go.Bar(x=weekly['날짜'], y=weekly['본훈련시간'], marker_color='#938172')).update_layout(template="plotly_dark", title="Weekly Accumulation (min)"), use_container_width=True)
+            st.plotly_chart(go.Figure(go.Bar(x=weekly['날짜'], y=weekly['본훈련시간'], marker_color='#938172')).update_layout(template="plotly_dark", title="Weekly Volume (min)"), use_container_width=True)
         with col2:
             st.plotly_chart(go.Figure(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], line=dict(color='#ffffff', width=2))).update_layout(template="plotly_dark", title="Stability Index (%)"), use_container_width=True)
         
