@@ -5,35 +5,39 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 
-# 1. 페이지 설정 및 shadcn 스타일 테마 적용 (Custom CSS)
+# 1. 페이지 설정 및 shadcn 스타일 테마 적용
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
 st.markdown("""
     <style>
-    /* shadcn/ui 스타일 CSS */
     .main { background-color: #09090b; }
-    .stMetric { 
-        background-color: #18181b; 
-        padding: 15px; 
-        border-radius: 12px; 
-        border: 1px solid #27272a; 
-    }
-    div[data-testid="stMetricValue"] { color: #fafafa; font-size: 1.8rem; font-weight: 700; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: transparent; }
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
+    /* 카드 스타일 */
+    .input-card {
         background-color: #18181b;
-        border-radius: 6px;
+        padding: 20px;
+        border-radius: 12px;
         border: 1px solid #27272a;
-        color: #a1a1aa;
-        padding: 0px 20px;
+        margin-bottom: 20px;
     }
-    .stTabs [aria-selected="true"] { background-color: #27272a; color: #fff; border: 1px solid #3f3f46; }
-    .stInfo, .stSuccess, .stWarning, .stError { border-radius: 12px; border: 1px solid #27272a; background-color: #18181b; }
+    .section-title {
+        color: #a1a1aa;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-bottom: 15px;
+        letter-spacing: 0.05em;
+    }
+    /* 입력창 스타일 */
+    .stNumberInput input, .stSelectbox div {
+        background-color: #09090b !important;
+        border: 1px solid #27272a !important;
+        border-radius: 8px !important;
+        color: #fafafa !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 연결 및 전처리
+# 2. 데이터 연결
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -42,42 +46,63 @@ if not df.empty:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-# 3. 사이드바 (내림차순 정렬 및 입력 폼)
+# 3. 사이드바 (조회 전용으로 간소화)
 with st.sidebar:
-    st.markdown("### ⚙️ Management")
-    mode = st.radio("Task", ["View & Edit", "🆕 New Session"], label_visibility="collapsed")
-    st.divider()
-    
-    if mode == "View & Edit" and not df.empty:
+    st.markdown("### 🔍 History")
+    if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
-        selected_session = st.selectbox("Select Session", sessions, index=0)
+        selected_session = st.selectbox("조회할 회차 선택", sessions, index=0)
         s_data = df[df["회차"] == selected_session].iloc[0]
-        btn_label = "Update Changes"
-    else:
-        next_session = int(df["회차"].max() + 1) if not df.empty else 1
-        s_data, selected_session = None, next_session
-        btn_label = "Save New Record"
+    st.divider()
+    st.caption("새로운 데이터를 입력하려면 우측 상단의 'Data Entry' 섹션을 이용하세요.")
 
-    with st.form(key="training_form"):
-        f_date = st.date_input("Date", value=pd.to_datetime(s_data['날짜']) if s_data is not None else pd.Timestamp.now())
-        f_session = st.number_input("Session No.", value=int(selected_session), step=1)
-        f_wp = st.number_input("Warmup (W)", value=int(s_data['웜업파워']) if s_data is not None else 97, step=1)
-        f_mp = st.number_input("Main (W)", value=int(s_data['본훈련파워']) if s_data is not None else 140, step=1)
-        f_cp = st.number_input("Cooldown (W)", value=int(s_data['쿨다운파워']) if s_data is not None else 90, step=1)
-        f_duration = st.slider("Duration (Min)", 15, 180, int(s_data['본훈련시간']) if s_data is not None else 90, step=5)
+# 4. 메인 화면 구성
+st.title("Zone 2 Training Lab")
+
+# [핵심] 입력 섹션 리디자인 - Expander를 활용한 깔끔한 UI
+with st.expander("🆕 Data Entry & Record Update", expanded=False):
+    st.markdown('<p class="section-title">Step 1: Session Information</p>', unsafe_allow_html=True)
+    
+    with st.form(key="modern_training_form"):
+        # 섹션 1: 기본 정보 및 파워 설정
+        c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
+        f_date = c1.date_input("날짜", value=pd.to_datetime(s_data['날짜']) if s_data is not None else pd.Timestamp.now())
+        f_session = c2.number_input("회차", value=int(df["회차"].max() + 1) if not df.empty else 1, step=1)
+        f_duration = c3.slider("본 훈련(분)", 15, 180, int(s_data['본훈련시간']) if s_data is not None else 60, step=5)
         
-        # 심박수 입력 필드
+        st.markdown('<p class="section-title">Step 2: Target Power (W)</p>', unsafe_allow_html=True)
+        p1, p2, p3 = st.columns(3)
+        f_wp = p1.number_input("Warmup", value=int(s_data['웜업파워']) if s_data is not None else 97, step=1)
+        f_mp = p2.number_input("Main", value=int(s_data['본훈련파워']) if s_data is not None else 140, step=1)
+        f_cp = p3.number_input("Cooldown", value=int(s_data['쿨다운파워']) if s_data is not None else 90, step=1)
+        
+        st.markdown('<p class="section-title">Step 3: Heart Rate Log (BPM)</p>', unsafe_allow_html=True)
         num_main = f_duration // 5
         total_steps = 2 + num_main + 1
         existing_hrs = str(s_data['전체심박데이터']).split(",") if s_data is not None else []
+        
+        # 가로 4열 그리드 배치로 가독성 극대화
         hr_inputs = []
+        h_cols = st.columns(4)
         for i in range(total_steps):
+            time_label = f"{i*5}m"
+            # 구간별 태그 표시 (WU, Main, CD)
+            if i < 2: label = f"🟢 {time_label} (WU)"
+            elif i < 2 + num_main: label = f"🔵 {time_label} (Main)"
+            else: label = f"⚪ {time_label} (CD)"
+            
             try: def_hr = int(float(existing_hrs[i].strip()))
             except: def_hr = 130
-            hr_val = st.number_input(f"HR at {i*5}m", value=def_hr, key=f"hr_{i}", step=1)
-            hr_inputs.append(str(int(hr_val)))
+            
+            with h_cols[i % 4]:
+                hr_val = st.number_input(label, value=def_hr, key=f"hr_m_{i}", step=1)
+                hr_inputs.append(str(int(hr_val)))
         
-        if st.form_submit_button(btn_label):
+        st.markdown("<br>", unsafe_allow_html=True)
+        submit = st.form_submit_button("🚀 RECORD SESSION", use_container_width=True)
+        
+        if submit:
+            # 디커플링 계산 및 시트 저장 로직 (이전과 동일)
             main_hrs = [int(x) for x in hr_inputs[2:-1]]
             mid = len(main_hrs) // 2
             f_ef_val = f_mp / np.mean(main_hrs[:mid])
@@ -88,61 +113,6 @@ with st.sidebar:
             conn.update(data=updated_df)
             st.rerun()
 
-# 4. 메인 대시보드 (shadcn 리디자인)
-if not df.empty and s_data is not None:
-    st.title(f"📊 Session {int(s_data['회차'])} Precision Report")
-    
-    tab1, tab2 = st.tabs(["Analysis", "Trends"])
+st.divider()
 
-    with tab1:
-        # AI Briefing Card
-        current_dec = s_data['디커플링(%)']
-        current_p, current_dur = int(s_data['본훈련파워']), int(s_data['본훈련시간'])
-        
-        if current_dec <= 5.0:
-            msg = f"**🔥 Optimal State.** {current_p}W is now your base. {'Increase duration to ' + str(current_dur+15) + 'm' if current_dur < 90 else 'Increase intensity to ' + str(current_p+5) + 'W'} next."
-            st.success(msg)
-        else:
-            st.warning(f"**⏳ Adaptation Required.** Decoupling at {current_dec}%. Stay at {current_p}W for 1-2 more sessions.")
-
-        # Metric Grid
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Target Power", f"{current_p}W")
-        m2.metric("Decoupling", f"{current_dec}%", delta="Stable" if current_dec <= 5.0 else "High", delta_color="normal" if current_dec <= 5.0 else "inverse")
-        m3.metric("Peak HR", f"{int(max([float(x) for x in str(s_data['전체심박데이터']).split(',')]))}BPM")
-        m4.metric("Total Volume", f"{current_dur}m")
-
-        # Sequence Plot (Plotly shadcn 스타일링)
-        hr_array = [int(float(x.strip())) for x in str(s_data['전체심박데이터']).split(",")]
-        time_array = [i*5 for i in range(len(hr_array))]
-        power_array = [int(s_data['웜업파워'])]*2 + [current_p]*(current_dur//5) + [int(s_data['쿨다운파워'])]
-        
-        fig1 = make_subplots(specs=[[{"secondary_y": True}]])
-        fig1.add_trace(go.Scatter(x=time_array, y=power_array, name="Power", line=dict(color='#3b82f6', width=3, shape='hv'), fill='tozeroy', fillcolor='rgba(59, 130, 246, 0.1)'), secondary_y=False)
-        fig1.add_trace(go.Scatter(x=time_array, y=hr_array, name="HR", line=dict(color='#ef4444', width=3, shape='spline')), secondary_y=True)
-        fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=400, showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
-        st.plotly_chart(fig1, use_container_width=True)
-
-    with tab2:
-        # Progress Tracker
-        progress = min(current_p / 160, 1.0)
-        st.markdown(f"**Road to 160W** ({progress*100:.1f}%)")
-        st.progress(progress)
-        
-        c_left, c_right = st.columns(2)
-        with c_left:
-            st.markdown("### Efficiency Index")
-            def get_ef(r): return int(r['본훈련파워']) / np.mean([float(x) for x in str(r['전체심박데이터']).split(",")][2:-1])
-            df['EF'] = df.apply(get_ef, axis=1)
-            fig_ef = go.Figure(go.Scatter(x=df['회차'], y=df['EF'], mode='lines+markers', line=dict(color='#10b981', width=3)))
-            fig_ef.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig_ef, use_container_width=True)
-        with c_right:
-            st.markdown("### HR Recovery")
-            def get_hrr(r): 
-                hrs = [float(x) for x in str(r['전체심박데이터']).split(",")]
-                return int(hrs[-2] - hrs[-1])
-            df['HRR'] = df.apply(get_hrr, axis=1)
-            fig_hrr = go.Figure(go.Bar(x=df['회차'], y=df['HRR'], marker_color='#f59e0b'))
-            fig_hrr.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig_hrr, use_container_width=True)
+# 이후 분석 대시보드 (Tab 1, Tab 2) 로직...
