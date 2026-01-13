@@ -6,17 +6,17 @@ from plotly.subplots import make_subplots
 import numpy as np
 import google.generativeai as genai
 
-# 1. 페이지 설정 및 테마
+# 1. 페이지 설정
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# --- [Gemini API 설정] ---
-# 실제 사용 시 st.secrets["GEMINI_API_KEY"] 등으로 관리하는 것이 보안상 좋습니다.
-# GEMINI_API_KEY = "AIzaSyAARH5lYJUH3EQD8hXsCPUMBpENJo3adPo" 
-# genai.configure(api_key=GEMINI_API_KEY)
-# GEMINI_API_KEY = "YOUR_GEMINI_API_KEY" 대신 아래 코드를 사용
-GEMINI_API_KEY = st.secrets["AIzaSyAARH5lYJUH3EQD8hXsCPUMBpENJo3adPo"]
-# 저지연 및 효율성을 위해 flash 모델을 사용합니다.
-ai_model = genai.GenerativeModel('gemini-1.5-flash')
+# --- [Gemini API 보안 로직] ---
+if "GEMINI_API_KEY" in st.secrets:
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=GEMINI_API_KEY)
+    ai_model = genai.GenerativeModel('gemini-1.5-flash')
+    gemini_ready = True
+else:
+    gemini_ready = False
 
 st.markdown("""
     <style>
@@ -33,7 +33,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 데이터 연결 및 전처리
+# 2. 데이터 연결
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -61,11 +61,9 @@ tab_entry, tab_analysis, tab_trends = st.tabs(["🆕 New Session", "🎯 Analysi
 # --- [TAB 1: 데이터 입력 (동적 UI)] ---
 with tab_entry:
     st.markdown('<p class="section-title">Step 1: Training Setup</p>', unsafe_allow_html=True)
-    
     c1, c2, c3 = st.columns([1, 1, 2])
     f_date = c1.date_input("날짜", value=pd.to_datetime(s_data['날짜']) if s_data is not None else pd.Timestamp.now().date())
     f_session = c2.number_input("회차", value=int(df["회차"].max() + 1) if not df.empty else 1, step=1)
-    # [핵심] 이 슬라이더에 따라 아래 입력칸 개수가 실시간으로 변합니다.
     f_duration = c3.slider("본 훈련 시간(분) 설정", 15, 180, int(s_data['본훈련시간']) if s_data is not None else 60, step=5)
     
     p1, p2, p3 = st.columns(3)
@@ -76,7 +74,6 @@ with tab_entry:
     st.divider()
     st.markdown(f'<p class="section-title">Step 2: Heart Rate Entry ({f_duration + 15}m Full Course)</p>', unsafe_allow_html=True)
 
-    # 포인트 계산: 웜업(0,5,10) + 본훈련(15...종료) + 쿨다운(+5)
     total_points = ( (10 + f_duration + 5) // 5 ) + 1
     existing_hrs = str(s_data['전체심박데이터']).split(",") if s_data is not None else []
     
@@ -87,15 +84,12 @@ with tab_entry:
         if t <= 10: label = f"🟢 웜업 {t}m"
         elif t <= 10 + f_duration: label = f"🔵 본훈련 {t}m"
         else: label = f"⚪ 쿨다운 {t}m"
-        
         try: def_val = int(float(existing_hrs[i].strip()))
         except: def_val = 130
-            
         with h_cols[i % 4]:
             hr_val = st.number_input(label, value=def_val, key=f"hr_i_{i}", step=1)
             hr_inputs.append(str(int(hr_val)))
 
-    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🚀 SAVE TRAINING RECORD", use_container_width=True):
         main_hrs = [int(x) for x in hr_inputs[2:-1]]
         mid = len(main_hrs) // 2
@@ -104,7 +98,6 @@ with tab_entry:
             s_ef = f_mp / np.mean(main_hrs[mid:])
             f_dec = round(((f_ef - s_ef) / f_ef) * 100, 2)
         else: f_dec = 0
-
         new_row = {
             "날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), 
             "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), 
@@ -123,12 +116,6 @@ with tab_analysis:
         hr_array = [int(float(x.strip())) for x in str(s_data['전체심박데이터']).split(",")]
         current_dec, current_p, current_dur = s_data['디커플링(%)'], int(s_data['본훈련파워']), int(s_data['본훈련시간'])
         max_hr = int(max(hr_array))
-
-        # 코칭 메시지
-        if current_dec <= 8.0:
-            st.info(f"**✅ 엔진 확장 가능성 확인.** 디커플링 {current_dec}%로 양호합니다. 다음 세션은 스텝업을 고려하세요!")
-        else:
-            st.error(f"**⏳ 적응 필요.** 심박 표류({current_dec}%)가 큽니다. 현재 파워 유지를 추천합니다.")
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Target Power", f"{current_p}W")
@@ -153,59 +140,35 @@ with tab_analysis:
 
         st.divider()
         
-        # 💬 Gemini AI 채팅 섹션
+        # Gemini 채팅 섹션
         st.markdown("### 💬 Chat with Gemini Coach")
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-
-        # 컨테이너를 사용하여 채팅창 높이 조절
-        chat_container = st.container(height=300)
-        with chat_container:
-            for message in st.session_state.messages:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
-
-        if prompt := st.chat_input("오늘 훈련에 대해 Gemini에게 물어보세요."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
+        if not gemini_ready:
+            st.warning("Gemini API 키가 설정되지 않았습니다. Streamlit Settings > Secrets에 키를 추가해 주세요.")
+        else:
+            if "messages" not in st.session_state:
+                st.session_state.messages = []
+            chat_container = st.container(height=300)
             with chat_container:
-                with st.chat_message("user"):
-                    st.markdown(prompt)
-
-            # 데이터 맥락 제공
-            context = f"""
-            너는 전문 사이클링 코치야. 사용자의 {selected_session}회차 데이터를 분석해서 답변해줘.
-            데이터: 파워 {current_p}W, 시간 {current_dur}분, 디커플링 {current_dec}%, 심박기록 {hr_array}.
-            사용자 질문: {prompt}
-            """
-            
-            with chat_container:
-                with st.chat_message("assistant"):
-                    response = ai_model.generate_content(context)
-                    st.markdown(response.text)
-                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                for message in st.session_state.messages:
+                    with st.chat_message(message["role"]):
+                        st.markdown(message["content"])
+            if prompt := st.chat_input("Gemini에게 질문하기..."):
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                with chat_container:
+                    with st.chat_message("user"): st.markdown(prompt)
+                context = f"코치로서 답변해줘. {selected_session}회차 데이터: 파워 {current_p}W, 디커플링 {current_dec}%, 심박 {hr_array}. 질문: {prompt}"
+                with chat_container:
+                    with st.chat_message("assistant"):
+                        response = ai_model.generate_content(context)
+                        st.markdown(response.text)
+                        st.session_state.messages.append({"role": "assistant", "content": response.text})
 
 # --- [TAB 3: Trends] ---
 with tab_trends:
     if not df.empty:
-        # EF, HRR 계산 등...
-        def safe_ef(r):
-            try:
-                hrs = [float(x.strip()) for x in str(r['전체심박데이터']).split(",")]
-                main = hrs[2:-1]
-                return int(r['본훈련파워']) / np.mean(main) if len(main) > 0 else 0
-            except: return 0
-        df['EF'] = df.apply(safe_ef, axis=1)
         df_vol = df.copy(); df_vol['날짜'] = pd.to_datetime(df_vol['날짜'])
         weekly_v = df_vol.set_index('날짜')['본훈련시간'].resample('W').sum().reset_index()
         weekly_v['날짜'] = weekly_v['날짜'].dt.strftime('%m/%d')
-
-        st.subheader(f"🏁 최종 목표(160W) 달성률: {min(int(s_data['본훈련파워'])/160*100, 100.0):.1f}%")
-        st.progress(min(int(s_data['본훈련파워'])/160, 1.0))
-        
-        st.markdown("### Efficiency Index (EF) Trend")
-        st.plotly_chart(go.Figure(go.Scatter(x=df['회차'], y=df['EF'], mode='lines+markers', line=dict(color='#10b981', width=3))).update_layout(template="plotly_dark", height=300), use_container_width=True)
-
-        st.divider()
         st.markdown("### 📅 Weekly Training Volume (min)")
         fig_vol = go.Figure(go.Bar(x=weekly_v['날짜'], y=weekly_v['본훈련시간'], text=(weekly_v['본훈련시간']/60).round(1), textposition='auto', marker_color='#8b5cf6'))
         fig_vol.update_layout(template="plotly_dark", height=350, margin=dict(l=10, r=10, t=30, b=10))
