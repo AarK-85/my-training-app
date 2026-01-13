@@ -38,7 +38,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. Data Sync Logic (v7.3 방식: 캐싱 제외 실시간 로드)
+# 3. Data Sync Logic
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -87,7 +87,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             def_hr = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_val = st.number_input(f"T + {i*5}m", value=def_hr, key=f"hr_v7_fix_{i}", step=1)
+            hr_val = st.number_input(f"T + {i*5}m", value=def_hr, key=f"hr_v731_{i}", step=1)
             hr_inputs.append(str(int(hr_val)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -98,9 +98,7 @@ with tab_entry:
         f_dec = round(((f_ef - s_ef) / f_ef) * 100, 2) if f_ef > 0 else 0
         new_row = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)}
         updated_df = pd.concat([df[df["회차"] != f_session], pd.DataFrame([new_row])], ignore_index=True).sort_values("회차")
-        conn.update(data=updated_df)
-        st.success("Cloud Database Updated.")
-        st.rerun()
+        conn.update(data=updated_df); st.success("Synced."); st.rerun()
 
 # --- [TAB 2: PERFORMANCE INTELLIGENCE] ---
 with tab_analysis:
@@ -128,56 +126,41 @@ with tab_analysis:
             time_x = [i*5 for i in range(len(hr_array))]
             power_y = [int(s_data['웜업파워']) if t < 10 else (current_p if t < 10 + int(s_data['본훈련시간']) else int(s_data['쿨다운파워'])) for t in time_x]
             
-            # [7.3 스타일 통합 그래프]
             fig = make_subplots(specs=[[{"secondary_y": True}]])
-            
-            # Power (Copper)
             fig.add_trace(go.Scatter(x=time_x, y=power_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
-            # HR (White)
             fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
-            # EF Drift (Magma Orange)
+            
+            # Efficiency Drift (Magma Orange)
             ef_trend = [round(current_p / h, 2) if h > 0 else 0 for h in hr_array]
             fig.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=2)), secondary_y=True)
 
-            # [핵심] update_yaxes 함수를 생략하고 layout 속성에 직접 접근 (에러 박멸)
-            fig.layout.template = "plotly_dark"
-            fig.layout.paper_bgcolor = 'rgba(0,0,0,0)'
-            fig.layout.plot_bgcolor = 'rgba(0,0,0,0)'
-            fig.layout.height = 450
-            fig.layout.margin = dict(l=0, r=0, t=20, b=0)
-            
-            # 축 설정 직접 대입 (yaxis=Power, yaxis2=HR/EF)
-            fig.layout.yaxis.title = "Power (W)"
-            fig.layout.yaxis.titlefont.color = "#938172"
-            fig.layout.yaxis.tickfont.color = "#938172"
-            
-            fig.layout.yaxis2.title = "HR / Efficiency"
-            fig.layout.yaxis2.titlefont.color = "#F4F4F5"
-            fig.layout.yaxis2.tickfont.color = "#F4F4F5"
-            fig.layout.yaxis2.side = "right"
-            fig.layout.yaxis2.overlaying = "y"
-            
+            # [AttributeError 해결] update_layout에서 딕셔너리 구조로 축 설정
+            fig.update_layout(
+                template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                height=450, margin=dict(l=0, r=0, t=20, b=0), showlegend=True,
+                yaxis=dict(
+                    title=dict(text="Power (W)", font=dict(color="#938172")),
+                    tickfont=dict(color="#938172")
+                ),
+                yaxis2=dict(
+                    title=dict(text="HR / Efficiency", font=dict(color="#F4F4F5")),
+                    tickfont=dict(color="#F4F4F5"),
+                    side="right", overlaying="y", anchor="x"
+                )
+            )
             st.plotly_chart(fig, use_container_width=True)
 
         with col_guide:
             st.markdown(f"""
             <div class="guide-text" style="margin-top:40px;">
-            <p><b style="color:#FF4D00;">Magma Orange Line</b><br>
-            Efficiency Drift 추이입니다. 파워와 평행할수록 심폐 기초 체력이 안정적임을 의미합니다.</p>
+            <p><b style="color:#FF4D00;">Magma Orange Line</b><br>유산소 효율 추이를 나타냅니다. 파워와 평행할수록 심폐 엔진이 안정적입니다.</p>
             </div>
             """, unsafe_allow_html=True)
-
-        if gemini_ready:
-            st.divider()
-            if pr := st.chat_input("Coach와 대화하기..."):
-                with st.spinner("Reviewing laps..."):
-                    res = ai_model.generate_content(f"Analyze: Session {int(s_data['회차'])}, Power {current_p}W, Decoupling {current_dec}%. User asks: {pr}")
-                    st.info(res.text)
 
 # --- [TAB 3: PROGRESSION] ---
 with tab_trends:
     if not df.empty:
-        df['날짜'] = pd.to_datetime(df['날짜'])
+        st.markdown('<p class="section-title">Stability Trend</p>', unsafe_allow_html=True)
         fig_trend = go.Figure(go.Scatter(x=df['날짜'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
-        fig_trend.update_layout(template="plotly_dark", title="Stability Index (%) Over Time")
+        fig_trend.update_layout(template="plotly_dark", height=350, yaxis_title="Decoupling (%)")
         st.plotly_chart(fig_trend, use_container_width=True)
