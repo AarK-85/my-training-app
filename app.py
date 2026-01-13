@@ -103,7 +103,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             hr_val = int(float(existing_hrs[i])) if i < len(existing_hrs) else 130
-            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v82_{i}", step=1)
+            hr_inp = st.number_input(f"T + {i*5}m", value=hr_val, key=f"hr_v83_{i}", step=1)
             hr_inputs.append(str(int(hr_inp)))
 
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -159,7 +159,7 @@ with tab_analysis:
             power_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + main_dur else int(s_data['쿨다운파워'])) for t in time_x]
             ef_trend = [round(p/h, 2) if h > 0 else 0 for p, h in zip(power_y, hr_array)]
 
-            # [REFINED FIG SETUP - NO SECONDARY_Y ARG IN UPDATE_YAXES]
+            # [STABLE V8.3] make_subplots 호출 시 secondary_y를 사용하되, update_yaxes를 아예 배제함
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.15,
                                 specs=[[{"secondary_y": True}], [{"secondary_y": False}]])
 
@@ -167,23 +167,15 @@ with tab_analysis:
             fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), row=1, col=1, secondary_y=True)
             fig.add_trace(go.Scatter(x=time_x[2:-1], y=ef_trend[2:-1], name="Efficiency Drift", line=dict(color='#FF4D00', width=3)), row=2, col=1)
 
-            # [ULTIMATE FIX] - update_yaxes의 인자를 최소화하여 에러 발생 가능성 차단
-            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=700, margin=dict(l=0, r=0, t=30, b=0), showlegend=True)
-            
-            # 레이아웃 딕셔너리에 직접 접근하여 축 설정 (에러 원인인 update_yaxes 내 복합 인자 제거)
-            fig.layout.yaxis.title = "Power (W)"
-            fig.layout.yaxis.titlefont.color = "#938172"
-            fig.layout.yaxis.tickfont.color = "#938172"
-            
-            fig.layout.yaxis2.title = "HR (bpm)"
-            fig.layout.yaxis2.titlefont.color = "#F4F4F5"
-            fig.layout.yaxis2.tickfont.color = "#F4F4F5"
-            
-            fig.layout.yaxis3.title = "Efficiency (EF)"
-            fig.layout.yaxis3.titlefont.color = "#FF4D00"
-            fig.layout.yaxis3.tickfont.color = "#FF4D00"
-            
-            fig.layout.xaxis2.title = "Time (min)"
+            # [FINAL AXIS STRATEGY] 딕셔너리를 사용하여 update_layout에서 모든 축을 명시적으로 제어 (에러 원천 차단)
+            fig.update_layout(
+                template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
+                height=700, margin=dict(l=0, r=0, t=30, b=0), showlegend=True,
+                yaxis=dict(title=dict(text="Power (W)", font=dict(color="#938172")), tickfont=dict(color="#938172")),
+                yaxis2=dict(title=dict(text="HR (bpm)", font=dict(color="#F4F4F5")), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y", anchor="x"),
+                yaxis3=dict(title=dict(text="Efficiency (EF)", font=dict(color="#FF4D00")), tickfont=dict(color="#FF4D00")),
+                xaxis2=dict(title="Time (min)")
+            )
             
             st.plotly_chart(fig, use_container_width=True)
 
