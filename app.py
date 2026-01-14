@@ -9,34 +9,27 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# 2. Genesis Magma Styling (v9.1: Dark Mode & Color Fix)
+# 2. Genesis Magma Styling (v9.3: Dark Mode & Typography Fixed)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
-    
-    /* Force Dark Mode */
     .stApp { background-color: #000000 !important; }
     [data-testid="stSidebar"] { background-color: #0c0c0e !important; }
-
     .main { background-color: #000000; font-family: 'Inter', sans-serif; }
     h1, h2, h3, p { color: #ffffff; font-family: 'Lexend', sans-serif; }
     .stTabs [data-baseweb="tab-list"] { gap: 12px; background-color: #0c0c0e; padding: 8px 12px; border-radius: 8px; border: 1px solid #1c1c1f; }
     .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; text-transform: uppercase; padding: 0px 25px; }
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #938172 !important; }
     .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #938172; padding-left: 15px; }
-    
-    .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; min-height: 160px; height: auto; overflow: hidden; word-wrap: break-word; }
+    .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; min-height: 180px; height: auto; overflow: hidden; word-wrap: break-word; }
     .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; display: inline-block; }
-    
-    /* Guide Box Styling Fix */
     .guide-box { color: #A1A1AA; font-size: 0.85rem; line-height: 1.6; padding: 20px; border-left: 3px solid #FF4D00; background: rgba(255, 77, 0, 0.05); }
     .guide-box b { color: #FF4D00 !important; font-size: 0.95rem; } 
-    
     .delete-container { border: 1px solid #450a0a; padding: 20px; border-radius: 8px; background: #110303; margin-top: 40px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. Data Sync & Integer Enforcement
+# 3. Data Sync
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -56,13 +49,12 @@ with st.sidebar:
         s_data = df[df["회차"] == selected_session].iloc[0]
     else: s_data = None
     if st.button("🔄 REFRESH DATASET"):
-        st.cache_data.clear()
-        st.rerun()
+        st.cache_data.clear(); st.rerun()
 
 # 5. Dashboard Tabs
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: SESSION REGISTRATION & MANAGEMENT] ---
+# --- [TAB 1: REGISTRATION & MANAGEMENT] ---
 with tab_entry:
     st.markdown('<p class="section-title">Session Configuration</p>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1, 2])
@@ -81,7 +73,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             dv = int(float(hr_list[i])) if i < len(hr_list) else 130
-            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v91_{i}", step=1)
+            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v93_{i}", step=1)
             hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -94,8 +86,7 @@ with tab_entry:
     st.markdown('<div class="delete-container">', unsafe_allow_html=True)
     st.markdown('<p style="color:#ef4444; font-size:0.75rem; font-weight:600; text-transform:uppercase; margin-bottom:15px;">Data Management Zone</p>', unsafe_allow_html=True)
     dc1, dc2 = st.columns([3, 1])
-    with dc1:
-        del_session = st.selectbox("Select Session to Delete", sorted(df["회차"].unique().tolist(), reverse=True), key="del_box", format_func=lambda x: f"Delete Session {int(x)}")
+    with dc1: del_session = st.selectbox("Select Session to Delete", sorted(df["회차"].unique().tolist(), reverse=True), key="del_box")
     with dc2:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("DELETE NOW", use_container_width=True):
@@ -110,13 +101,34 @@ with tab_analysis:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         avg_ef = round(c_p / np.mean(hr_array[2:-1]), 2)
         
-        if c_dec < 6.0 and c_dur >= 60:
-            next_p = c_p + 5 if c_p < 160 else 160
-            next_instruct = f"Enter {next_p}W Zone"
-            focus_msg = f"Solid base confirmed. Moving to next 5W increment."
+        # [NEW: Holistic Coaching Engine v9.3]
+        hr_middle = np.mean(hr_array[2:len(hr_array)//2])
+        hr_end = np.mean(hr_array[len(hr_array)//2:-1])
+        hr_drift = hr_end - hr_middle  # Absolute drift in bpm
+
+        score = 0
+        if c_dec < 6.0: score += 40
+        elif c_dec < 7.5 and hr_drift < 3: score += 40 # [Holistic Gain] Stabilized HR allows higher decoupling
+        
+        if c_dur >= 85: score += 30
+        elif c_dur >= 60: score += 15
+        
+        if hr_drift < 4: score += 30 # Excellent late-session control
+        elif hr_drift < 7: score += 15
+
+        # Final Decision
+        if score >= 85:
+            next_p = min(c_p + 5, 160)
+            next_instruct = f"Strategic Advance to {next_p}W"
+            focus_msg = "Excellent heart rate plateau observed. Your aerobic engine shows high resilience despite duration. Level up recommended."
+        elif score >= 55:
+            next_p = c_p
+            next_instruct = f"Consolidate {c_p}W"
+            focus_msg = "Stable performance, but let's confirm this output or extend duration to 90m to minimize cardiac drift."
         else:
-            next_instruct = f"Re-confirm {c_p}W"
-            focus_msg = "Stabilize decoupling below 6% before increment."
+            next_p = c_p
+            next_instruct = "Base Stability Focus"
+            focus_msg = "Significant cardiac drift detected. Maintain current power and focus on stabilization before moving up."
 
         st.markdown('<p class="section-title">AI Performance & Next Prescription</p>', unsafe_allow_html=True)
         brief_col1, brief_col2 = st.columns(2)
