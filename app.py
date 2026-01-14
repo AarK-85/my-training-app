@@ -160,16 +160,16 @@ with tab_analysis:
         with ce2:
             st.markdown('<div class="guide-box"><b>Aerobic Stability</b><br><br>안정적인 구간은 수평선을 유지하며, 하향 곡선은 심박 표류(Drift)를 의미합니다.</div>', unsafe_allow_html=True)
 
-# --- [TAB 3: PROGRESSION] ---
+# [TAB 3: PROGRESSION - 체중 감량 고려 버전]
 with tab_trends:
     if not df.empty:
-        st.markdown('<p class="section-title">FTP 3.0W/kg Pursuit (Target 210W)</p>', unsafe_allow_html=True)
-        curr_max = df['본훈련파워'].max(); progress = min(100, int((curr_max / 210) * 100))
-        st.progress(progress / 100); st.write(f"Current Max: {int(curr_max)}W / Target: 210W ({progress}%)")
+        st.markdown('<p class="section-title">Road to FTP 3.0W/kg (Target Zone 2: 180W)</p>', unsafe_allow_html=True)
         
-        st.markdown('<p class="section-title">Aerobic Efficiency (EF) Trend</p>', unsafe_allow_html=True)
-        df['EF_Val'] = df.apply(lambda row: row['본훈련파워'] / np.mean([int(i) for i in str(row['전체심박데이터']).split(',')[2:-1]]) if len(str(row['전체심박데이터']).split(',')) > 3 else 0, axis=1)
-        fig_ef = go.Figure()
-        fig_ef.add_trace(go.Scatter(x=df['회차'], y=df['EF_Val'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
-        fig_ef.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_ef, use_container_width=True)
+        # 감량 후 예상되는 Zone 2 최종 타겟을 180W로 설정
+        target_z2 = 180 
+        current_z2 = df['본훈련파워'].max()
+        
+        progress = min(100, int((current_z2 / target_z2) * 100))
+        st.progress(progress / 100)
+        st.write(f"Current Zone 2: {int(current_z2)}W / Final Goal: {target_z2}W ({progress}%)")
+        st.caption("※ 체중 80~82kg 감량 및 FTP 3.0W/kg 달성을 위한 보수적 Target입니다.")
