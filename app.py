@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 
-# 2. Genesis Magma Styling (v9.3: Dark Mode & Typography Fixed)
+# 2. Genesis Magma Styling (v9.4: FTP Target & HRV Support)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -29,7 +29,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. Data Sync
+# 3. Data Sync & Management
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0)
 
@@ -37,7 +37,8 @@ if not df.empty:
     df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce').dt.date
     df = df.dropna(subset=['날짜'])
     df['회차'] = pd.to_numeric(df['회차'], errors='coerce').fillna(0).astype(int)
-    for col in ['웜업파워', '본훈련파워', '쿨다운파워', '본훈련시간', '디커플링(%)']:
+    num_cols = ['웜업파워', '본훈련파워', '쿨다운파워', '본훈련시간', '디커플링(%)', 'HRV']
+    for col in num_cols:
         if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
 # 4. Sidebar Archive
@@ -54,14 +55,17 @@ with st.sidebar:
 # 5. Dashboard Tabs
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION & MANAGEMENT] ---
+# --- [TAB 1: SESSION REGISTRATION & HRV] ---
 with tab_entry:
     st.markdown('<p class="section-title">Session Configuration</p>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1, 1, 2])
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
     f_date = c1.date_input("Date", value=datetime.now().date())
     f_session = c2.number_input("Session No.", value=int(df["회차"].max() + 1) if not df.empty else 1, step=1)
-    f_duration = c3.slider("Duration (min)", 15, 180, 60, step=5)
-    p1, p2, p3 = st.columns(3); f_wp, f_mp, f_cp = p1.number_input("Warm-up (W)", 100), p2.number_input("Target (W)", 140), p3.number_input("Cool-down (W)", 90)
+    f_duration = c3.slider("Duration (min)", 15, 180, 60, step=15) # 15분 단위 점증 반영
+    f_hrv = c4.number_input("Post-HRV (ms)", value=int(s_data['HRV']) if s_data is not None else 50, step=1)
+    
+    p1, p2, p3 = st.columns(3)
+    f_wp, f_mp, f_cp = p1.number_input("Warm-up (W)", 100), p2.number_input("Target (W)", 140), p3.number_input("Cool-down (W)", 90)
     
     st.divider()
     st.markdown('<p class="section-title">Biometric Telemetry</p>', unsafe_allow_html=True)
@@ -73,14 +77,14 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             dv = int(float(hr_list[i])) if i < len(hr_list) else 130
-            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v93_{i}", step=1)
+            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v94_{i}", step=1)
             hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
         m_hrs = [int(x) for x in hr_inputs[2:-1]]; mid = len(m_hrs) // 2
         f_ef = f_mp / np.mean(m_hrs[:mid]) if mid > 0 else 0; s_ef = f_mp / np.mean(m_hrs[mid:]) if mid > 0 else 0
         f_dec = round(((f_ef - s_ef) / f_ef) * 100, 2) if f_ef > 0 else 0
-        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)}
+        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "HRV": int(f_hrv), "전체심박데이터": ", ".join(hr_inputs)}
         conn.update(data=pd.concat([df[df["회차"] != f_session], pd.DataFrame([new])], ignore_index=True).sort_values("회차")); st.rerun()
 
     st.markdown('<div class="delete-container">', unsafe_allow_html=True)
@@ -101,45 +105,47 @@ with tab_analysis:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         avg_ef = round(c_p / np.mean(hr_array[2:-1]), 2)
         
-        # [NEW: Holistic Coaching Engine v9.3]
+        # [NEW: Holistic Coaching Engine v9.4 - 15m Incremental Logic]
         hr_middle = np.mean(hr_array[2:len(hr_array)//2])
         hr_end = np.mean(hr_array[len(hr_array)//2:-1])
-        hr_drift = hr_end - hr_middle  # Absolute drift in bpm
+        hr_drift = hr_end - hr_middle
 
         score = 0
         if c_dec < 6.0: score += 40
-        elif c_dec < 7.5 and hr_drift < 3: score += 40 # [Holistic Gain] Stabilized HR allows higher decoupling
-        
-        if c_dur >= 85: score += 30
-        elif c_dur >= 60: score += 15
-        
-        if hr_drift < 4: score += 30 # Excellent late-session control
+        elif c_dec < 7.5 and hr_drift < 3: score += 40 # Holistic gain
+
+        # 점진적 시간 목표 (15m step)
+        if c_dur >= 90: score += 30; next_dur = 90
+        elif c_dur >= 75: score += 25; next_dur = 90
+        else: score += 15; next_dur = c_dur + 15
+
+        if hr_drift < 4: score += 30
         elif hr_drift < 7: score += 15
 
-        # Final Decision
         if score >= 85:
-            next_p = min(c_p + 5, 160)
-            next_instruct = f"Strategic Advance to {next_p}W"
-            focus_msg = "Excellent heart rate plateau observed. Your aerobic engine shows high resilience despite duration. Level up recommended."
+            if c_dur >= 90:
+                next_p = c_p + 5; next_instruct = f"Level Up to {next_p}W"
+                msg = f"90m Base Mastered at {c_p}W. Strategic 5W increment recommended."
+            else:
+                next_instruct = f"Extend to {next_dur}m"
+                msg = f"Stable at {c_p}W. Now extend duration to {next_dur}m to build endurance."
         elif score >= 55:
-            next_p = c_p
             next_instruct = f"Consolidate {c_p}W"
-            focus_msg = "Stable performance, but let's confirm this output or extend duration to 90m to minimize cardiac drift."
+            msg = "Stable performance, but let's confirm this output again to minimize cardiac drift."
         else:
-            next_p = c_p
             next_instruct = "Base Stability Focus"
-            focus_msg = "Significant cardiac drift detected. Maintain current power and focus on stabilization before moving up."
+            msg = "Significant cardiac drift. Maintain current power and focus on heart rate stabilization."
 
         st.markdown('<p class="section-title">AI Performance & Next Prescription</p>', unsafe_allow_html=True)
-        brief_col1, brief_col2 = st.columns(2)
-        with brief_col1:
+        col1, col2 = st.columns(2)
+        with col1:
             st.markdown(f"""<div class="briefing-card"><span class="prescription-badge">CURRENT RESULT</span>
             <p style="margin:0; font-weight:600;">Session {int(s_data['회차'])}: {c_p}W / {c_dur}m</p>
-            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Efficiency: <b>{avg_ef} EF</b><br>Decoupling: <b>{c_dec}%</b></p></div>""", unsafe_allow_html=True)
-        with brief_col2:
+            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Efficiency: <b>{avg_ef} EF</b><br>Decoupling: <b>{c_dec}%</b><br>HRV: <b>{int(s_data['HRV'])} ms</b></p></div>""", unsafe_allow_html=True)
+        with col2:
             st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT PRESCRIPTION</span>
             <p style="margin:0; font-weight:600;">Target: {next_instruct}</p>
-            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Note: {focus_msg}</p></div>""", unsafe_allow_html=True)
+            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Note: {msg}</p></div>""", unsafe_allow_html=True)
 
         st.markdown('<p class="section-title">Power & Heart Rate Correlation</p>', unsafe_allow_html=True)
         time_x = [i*5 for i in range(len(hr_array))]
@@ -148,8 +154,6 @@ with tab_analysis:
         fig1.add_trace(go.Scatter(x=time_x, y=p_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
         fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
         fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
-        fig1.layout.yaxis.update(title=dict(text="Power (W)", font=dict(color="#938172")), tickfont=dict(color="#938172"))
-        fig1.layout.yaxis2.update(title=dict(text="HR (bpm)", font=dict(color="#F4F4F5")), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y")
         st.plotly_chart(fig1, use_container_width=True)
 
         st.markdown('<p class="section-title">Efficiency Drift Analysis</p>', unsafe_allow_html=True)
@@ -159,31 +163,34 @@ with tab_analysis:
             fig2 = go.Figure()
             fig2.add_trace(go.Scatter(x=time_x[2:-1], y=ef_y[2:-1], line=dict(color='#FF4D00', width=3), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
             fig2.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(l=0, r=0, t=10, b=0))
-            fig2.layout.yaxis.update(title=dict(text="EF Factor", font=dict(color="#FF4D00")), tickfont=dict(color="#FF4D00"))
             st.plotly_chart(fig2, use_container_width=True)
         with ce2:
             st.markdown('<div class="guide-box"><b>Aerobic Stability</b><br><br>Downward slope indicates cardiac drift. Flat line means solid aerobic base.</div>', unsafe_allow_html=True)
 
-# --- [TAB 3: PROGRESSION] ---
+# --- [TAB 3: PROGRESSION & FTP 3.0 Pursuit] ---
 with tab_trends:
     if not df.empty:
-        st.markdown('<p class="section-title">Road to 160W Final Goal</p>', unsafe_allow_html=True)
+        # 1. FTP 3.0W/kg Target Gauge (Assume user weight: 70kg as placeholder)
+        st.markdown('<p class="section-title">FTP 3.0W/kg Pursuit Gauge</p>', unsafe_allow_html=True)
+        target_ftp = 210 # Example: 70kg * 3.0
         current_max = df['본훈련파워'].max()
-        progress = min(100, int((current_max / 160) * 100))
-        st.write(f"**Current Achievement: {progress}% of 160W Target**")
+        progress = min(100, int((current_max / target_ftp) * 100))
+        st.write(f"**Current: {int(current_max)}W / Target: {target_ftp}W (3.0W/kg)**")
         st.progress(progress / 100)
 
-        st.markdown('<p class="section-title">Aerobic Stability Trend</p>', unsafe_allow_html=True)
-        fig_dec = go.Figure()
-        fig_dec.add_trace(go.Scatter(x=df['회차'], y=df['디커플링(%)'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
-        fig_dec.add_hline(y=5.0, line_dash="dash", line_color="#938172", annotation_text="Goal (5%)")
-        fig_dec.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        fig_dec.update_xaxes(dtick=1, title="Session No.")
-        st.plotly_chart(fig_dec, use_container_width=True)
-        
-        st.markdown('<p class="section-title">Power Output Progression</p>', unsafe_allow_html=True)
+        # 2. EF & HRV Trend
+        st.markdown('<p class="section-title">Efficiency Factor & HRV Trend</p>', unsafe_allow_html=True)
+        df['EF'] = df['본훈련파워'] / (df['전체심박데이터'].apply(lambda x: np.mean([int(i) for i in x.split(',')[2:-1]])))
+        fig_ef = go.Figure()
+        fig_ef.add_trace(go.Scatter(x=df['회차'], y=df['EF'], name="EF (Efficiency)", line=dict(color='#FF4D00', width=2)))
+        fig_ef.add_trace(go.Scatter(x=df['회차'], y=df['HRV']/40, name="HRV (Scaled)", line=dict(color='#938172', dash='dot'))) # Scaled for visibility
+        fig_ef.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(fig_ef, use_container_width=True)
+
+        # 3. Power Progression
+        st.markdown('<p class="section-title">Power Output History</p>', unsafe_allow_html=True)
         fig_pwr = go.Figure()
         fig_pwr.add_trace(go.Bar(x=df['회차'], y=df['본훈련파워'], marker_color='#938172'))
-        fig_pwr.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-        fig_pwr.update_xaxes(dtick=1, title="Session No.")
+        fig_pwr.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=10, b=0))
+        fig_pwr.update_xaxes(dtick=1)
         st.plotly_chart(fig_pwr, use_container_width=True)
