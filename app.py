@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Zone 2 Precision Lab v9.5", layout="wide")
 
-# 2. Genesis Magma Styling
+# 2. Genesis Magma Styling (v9.1 디자인 계승 + v9.5 기능 통합)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -90,12 +90,12 @@ with tab_analysis:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         c_p, c_dur, c_dec = int(s_data['본훈련파워']), int(s_data['본훈련시간']), s_data['디커플링(%)']
         
-        # [HRR Calculation: Last Main HR - Last Cooldown HR]
+        # [HRR Analysis] 본훈련 종료 심박 vs 쿨다운 종료 심박
         hr_last_main = hr_array[-2] 
         hr_last_cool = hr_array[-1]
-        hr_recovery = hr_last_main - hr_last_cool # Heart Rate Recovery (5min)
+        hr_recovery = hr_last_main - hr_last_cool
 
-        # [Holistic Coaching v9.5]
+        # [Coaching Logic v9.5]
         hr_mid = np.mean(hr_array[2:len(hr_array)//2]); hr_end = np.mean(hr_array[len(hr_array)//2:-1])
         hr_drift = hr_end - hr_mid
         
@@ -104,33 +104,51 @@ with tab_analysis:
         if c_dur >= 90: score += 30; next_dur = 90
         elif c_dur >= 75: score += 25; next_dur = 90
         else: score += 15; next_dur = c_dur + 15
-        if hr_recovery > 25: score += 30 # Strong recovery bonus
+        if hr_recovery > 25: score += 30
         elif hr_recovery > 15: score += 15
 
         if score >= 85 and c_dur >= 90:
-            next_step = f"Level Up to {c_p + 5}W"; msg = "Exceptional recovery and stability. 90m Base mastered. Time to increase power."
+            next_step = f"Level Up to {c_p + 5}W"; msg = "Exceptional recovery and stability. 90m Base mastered. Power increase recommended."
         elif score >= 60:
-            next_step = f"Extend to {next_dur}m"; msg = f"Stable heart rate recovery ({hr_recovery}bpm). Now focus on extending duration to {next_dur}m."
+            next_step = f"Extend to {next_dur}m"; msg = f"Stable recovery ({hr_recovery}bpm). Focus on extending duration to {next_dur}m."
         else:
-            next_step = f"Consolidate {c_p}W"; msg = "Recovery or drift needs improvement. Hold current intensity."
+            next_step = f"Consolidate {c_p}W"; msg = "Cardiac drift or recovery needs stabilization. Maintain current intensity."
 
         st.markdown('<p class="section-title">AI Performance & HRR Analysis</p>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
             st.markdown(f"""<div class="briefing-card"><span class="prescription-badge">CURRENT RESULT</span>
             <p style="margin:0; font-weight:600;">Session {int(s_data['회차'])}: {c_p}W / {c_dur}m</p>
-            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Decoupling: <b>{c_dec}%</b><br>HR Recovery: <b>{hr_recovery} bpm</b> (5m)</p></div>""", unsafe_allow_html=True)
+            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Decoupling: <b>{c_dec}%</b><br>HR Recovery: <b>{hr_recovery} bpm</b></p></div>""", unsafe_allow_html=True)
         with col2:
             st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT PRESCRIPTION</span>
             <p style="margin:0; font-weight:600;">Target: {next_step}</p>
             <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Note: {msg}</p></div>""", unsafe_allow_html=True)
 
-        # Plotly Charts (Same as v9.4)
+        # [v9.1 디자인 계승: Power & HR Correlation Graph]
+        st.markdown('<p class="section-title">Power & Heart Rate Correlation</p>', unsafe_allow_html=True)
         time_x = [i*5 for i in range(len(hr_array))]
+        p_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + c_dur else int(s_data['쿨다운파워'])) for t in time_x]
+        
         fig1 = make_subplots(specs=[[{"secondary_y": True}]])
-        fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#F4F4F5', width=2)), secondary_y=True)
-        fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, showlegend=False)
+        fig1.add_trace(go.Scatter(x=time_x, y=p_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
+        fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
+        fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
+        fig1.layout.yaxis.update(title=dict(text="Power (W)", font=dict(color="#938172")), tickfont=dict(color="#938172"))
+        fig1.layout.yaxis2.update(title=dict(text="HR (bpm)", font=dict(color="#F4F4F5")), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y")
         st.plotly_chart(fig1, use_container_width=True)
+
+        # [Efficiency Drift & Stability Analysis]
+        st.markdown('<p class="section-title">Efficiency Drift Analysis</p>', unsafe_allow_html=True)
+        ce1, ce2 = st.columns([3, 1])
+        with ce1:
+            ef_y = [round(c_p / h, 2) if h > 0 else 0 for h in hr_array]
+            fig2 = go.Figure()
+            fig2.add_trace(go.Scatter(x=time_x[2:-1], y=ef_y[2:-1], line=dict(color='#FF4D00', width=3), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
+            fig2.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig2, use_container_width=True)
+        with ce2:
+            st.markdown('<div class="guide-box"><b>Aerobic Stability</b><br><br>안정적인 구간은 수평선을 유지하며, 하향 곡선은 심박 표류(Drift)를 의미합니다.</div>', unsafe_allow_html=True)
 
 # --- [TAB 3: PROGRESSION] ---
 with tab_trends:
@@ -138,11 +156,12 @@ with tab_trends:
         st.markdown('<p class="section-title">FTP 3.0W/kg Pursuit (Target 210W)</p>', unsafe_allow_html=True)
         curr_max = df['본훈련파워'].max(); progress = min(100, int((curr_max / 210) * 100))
         st.progress(progress / 100)
-        st.write(f"Current: {int(curr_max)}W / Target: 210W ({progress}%)")
+        st.write(f"Current Max: {int(curr_max)}W / Target: 210W ({progress}%)")
         
-        # EF Trend
-        df['EF'] = df['본훈련파워'] / (df['전체심박데이터'].apply(lambda x: np.mean([int(i) for i in x.split(',')[2:-1]])))
+        st.markdown('<p class="section-title">Aerobic Efficiency (EF) Trend</p>', unsafe_allow_html=True)
+        # EF 계산 및 트렌드 차트
+        df['EF_Val'] = df.apply(lambda row: row['본훈련파워'] / np.mean([int(i) for i in str(row['전체심박데이터']).split(',')[2:-1]]) if len(str(row['전체심박데이터']).split(',')) > 3 else 0, axis=1)
         fig_ef = go.Figure()
-        fig_ef.add_trace(go.Scatter(x=df['회차'], y=df['EF'], line=dict(color='#FF4D00', width=2)))
+        fig_ef.add_trace(go.Scatter(x=df['회차'], y=df['EF_Val'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
         fig_ef.update_layout(template="plotly_dark", height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_ef, use_container_width=True)
