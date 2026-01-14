@@ -13,6 +13,10 @@ st.set_page_config(page_title="Zone 2 Precision Lab", layout="wide")
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
+    /* --- [이 코드를 추가하세요] --- */
+    .stApp { background-color: #000000 !important; }
+    [data-testid="stSidebar"] { background-color: #0c0c0e !important; }
+    /* -------------------------- */
     .main { background-color: #000000; font-family: 'Inter', sans-serif; }
     h1, h2, h3, p { color: #ffffff; font-family: 'Lexend', sans-serif; }
     .stTabs [data-baseweb="tab-list"] { gap: 12px; background-color: #0c0c0e; padding: 8px 12px; border-radius: 8px; border: 1px solid #1c1c1f; }
