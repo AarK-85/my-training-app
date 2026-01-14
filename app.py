@@ -7,9 +7,9 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="Zone 2 Precision Lab v9.5", layout="wide")
+st.set_page_config(page_title="Zone 2 Precision Lab v9.6", layout="wide")
 
-# 2. Genesis Magma Styling (v9.1 디자인 계승 + v9.5 기능 통합)
+# 2. Genesis Magma Styling (Fixed Dark Mode & Typography)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -74,7 +74,7 @@ with tab_entry:
     for i in range(total_pts):
         with h_cols[i % 4]:
             dv = int(float(hr_list[i])) if i < len(hr_list) else 130
-            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v95_{i}", step=1)
+            hv = st.number_input(f"T + {i*5}m", value=dv, key=f"hr_v96_{i}", step=1)
             hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT PERFORMANCE DATA", use_container_width=True):
@@ -84,61 +84,71 @@ with tab_entry:
         new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "웜업파워": int(f_wp), "본훈련파워": int(f_mp), "쿨다운파워": int(f_cp), "본훈련시간": int(f_duration), "디커플링(%)": f_dec, "전체심박데이터": ", ".join(hr_inputs)}
         conn.update(data=pd.concat([df[df["회차"] != f_session], pd.DataFrame([new])], ignore_index=True).sort_values("회차")); st.rerun()
 
+    # 삭제 관리자 추가
+    st.markdown('<div class="delete-container">', unsafe_allow_html=True)
+    st.markdown('<p style="color:#ef4444; font-size:0.75rem; font-weight:600; text-transform:uppercase; margin-bottom:15px;">Data Management Zone</p>', unsafe_allow_html=True)
+    dc1, dc2 = st.columns([3, 1])
+    with dc1: del_session = st.selectbox("Select Session to Delete", sorted(df["회차"].unique().tolist(), reverse=True), key="del_box")
+    with dc2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("DELETE NOW", use_container_width=True):
+            conn.update(data=df[df["회차"] != del_session]); st.cache_data.clear(); st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # --- [TAB 2: PERFORMANCE INTELLIGENCE] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         c_p, c_dur, c_dec = int(s_data['본훈련파워']), int(s_data['본훈련시간']), s_data['디커플링(%)']
         
-        # [HRR Analysis] 본훈련 종료 심박 vs 쿨다운 종료 심박
-        hr_last_main = hr_array[-2] 
-        hr_last_cool = hr_array[-1]
-        hr_recovery = hr_last_main - hr_last_cool
-
-        # [Coaching Logic v9.5]
+        # [HRR Analysis]
+        hr_recovery = hr_array[-2] - hr_array[-1]
         hr_mid = np.mean(hr_array[2:len(hr_array)//2]); hr_end = np.mean(hr_array[len(hr_array)//2:-1])
         hr_drift = hr_end - hr_mid
         
+        # [v9.6 Logic: 정합성 교정 버전]
         score = 0
         if c_dec < 6.0 or (c_dec < 7.5 and hr_drift < 3): score += 40
         if c_dur >= 90: score += 30; next_dur = 90
-        elif c_dur >= 75: score += 25; next_dur = 90
-        else: score += 15; next_dur = c_dur + 15
-        if hr_recovery > 25: score += 30
-        elif hr_recovery > 15: score += 15
+        elif c_dur >= 75: score += 20; next_dur = 90
+        else: score += 10; next_dur = c_dur + 15
+        if hr_recovery > 20: score += 30
+        elif hr_recovery > 10: score += 15
 
-        if score >= 85 and c_dur >= 90:
-            next_step = f"Level Up to {c_p + 5}W"; msg = "Exceptional recovery and stability. 90m Base mastered. Power increase recommended."
-        elif score >= 60:
-            next_step = f"Extend to {next_dur}m"; msg = f"Stable recovery ({hr_recovery}bpm). Focus on extending duration to {next_dur}m."
+        if score >= 70 and c_dur >= 90:
+            next_step = f"Level Up to {c_p + 5}W / 60m"
+            msg = f"90m Base Mastered! 강도를 {c_p+5}W로 상향하고, 시간을 60분으로 리셋하여 안정성을 확인하세요."
+        elif score >= 50:
+            next_step = f"Extend to {next_dur}m / {c_p}W"
+            msg = f"안정적인 효율이 관찰됩니다. 현재 파워를 유지하며 시간을 {next_dur}분으로 늘려 유산소 기초를 다지세요."
         else:
-            next_step = f"Consolidate {c_p}W"; msg = "Cardiac drift or recovery needs stabilization. Maintain current intensity."
+            next_step = f"Consolidate {c_p}W / {c_dur}m"
+            msg = "심박 표류가 기준치를 넘었습니다. 상향보다는 현재 조건에서의 안정화 수행이 우선입니다."
 
         st.markdown('<p class="section-title">AI Performance & HRR Analysis</p>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
             st.markdown(f"""<div class="briefing-card"><span class="prescription-badge">CURRENT RESULT</span>
             <p style="margin:0; font-weight:600;">Session {int(s_data['회차'])}: {c_p}W / {c_dur}m</p>
-            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Decoupling: <b>{c_dec}%</b><br>HR Recovery: <b>{hr_recovery} bpm</b></p></div>""", unsafe_allow_html=True)
+            <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Decoupling: <b>{c_dec}%</b><br>HR Recovery: <b>{hr_recovery} bpm</b> (5m)</p></div>""", unsafe_allow_html=True)
         with col2:
             st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT PRESCRIPTION</span>
             <p style="margin:0; font-weight:600;">Target: {next_step}</p>
             <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Note: {msg}</p></div>""", unsafe_allow_html=True)
 
-        # [v9.1 디자인 계승: Power & HR Correlation Graph]
+        # [Power & HR Correlation Graph]
         st.markdown('<p class="section-title">Power & Heart Rate Correlation</p>', unsafe_allow_html=True)
         time_x = [i*5 for i in range(len(hr_array))]
         p_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + c_dur else int(s_data['쿨다운파워'])) for t in time_x]
-        
         fig1 = make_subplots(specs=[[{"secondary_y": True}]])
         fig1.add_trace(go.Scatter(x=time_x, y=p_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
         fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
-        fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
+        fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, showlegend=False)
         fig1.layout.yaxis.update(title=dict(text="Power (W)", font=dict(color="#938172")), tickfont=dict(color="#938172"))
         fig1.layout.yaxis2.update(title=dict(text="HR (bpm)", font=dict(color="#F4F4F5")), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y")
         st.plotly_chart(fig1, use_container_width=True)
 
-        # [Efficiency Drift & Stability Analysis]
+        # [Efficiency Drift Analysis]
         st.markdown('<p class="section-title">Efficiency Drift Analysis</p>', unsafe_allow_html=True)
         ce1, ce2 = st.columns([3, 1])
         with ce1:
@@ -155,11 +165,9 @@ with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">FTP 3.0W/kg Pursuit (Target 210W)</p>', unsafe_allow_html=True)
         curr_max = df['본훈련파워'].max(); progress = min(100, int((curr_max / 210) * 100))
-        st.progress(progress / 100)
-        st.write(f"Current Max: {int(curr_max)}W / Target: 210W ({progress}%)")
+        st.progress(progress / 100); st.write(f"Current Max: {int(curr_max)}W / Target: 210W ({progress}%)")
         
         st.markdown('<p class="section-title">Aerobic Efficiency (EF) Trend</p>', unsafe_allow_html=True)
-        # EF 계산 및 트렌드 차트
         df['EF_Val'] = df.apply(lambda row: row['본훈련파워'] / np.mean([int(i) for i in str(row['전체심박데이터']).split(',')[2:-1]]) if len(str(row['전체심박데이터']).split(',')) > 3 else 0, axis=1)
         fig_ef = go.Figure()
         fig_ef.add_trace(go.Scatter(x=df['회차'], y=df['EF_Val'], mode='lines+markers', line=dict(color='#FF4D00', width=2)))
