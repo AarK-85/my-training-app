@@ -7,9 +7,9 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="Dual-Engine Lab v9.7", layout="wide")
+st.set_page_config(page_title="Dual-Engine Lab v9.71", layout="wide")
 
-# 2. Styling (v9.1 Magma Aesthetic)
+# 2. Styling (v9.1/v9.62 Aesthetic Restored)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -35,7 +35,6 @@ if not df.empty:
     df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce').dt.date
     df = df.dropna(subset=['날짜'])
     df['회차'] = pd.to_numeric(df['회차'], errors='coerce').fillna(0).astype(int)
-    # 훈련타입 컬럼이 없을 경우 대비
     if '훈련타입' not in df.columns: df['훈련타입'] = 'ZONE 2'
 
 # 4. Sidebar Archive
@@ -63,7 +62,6 @@ with tab_entry:
     
     p1, p2, p3 = st.columns(3)
     f_wp = p1.number_input("Warm-up (W)", 100)
-    # SST일 경우 기본 타겟 파워를 높게 설정 (145~155W 예상)
     f_mp = p2.number_input("Target Power (W)", 140 if w_type == "ZONE 2" else 155)
     f_cp = p3.number_input("Cool-down (W)", 90)
     
@@ -74,7 +72,7 @@ with tab_entry:
     h_cols = st.columns(4)
     for i in range(total_pts):
         with h_cols[i % 4]:
-            hv = st.number_input(f"T + {i*5}m", value=130, key=f"hr_v97_{i}", step=1)
+            hv = st.number_input(f"T + {i*5}m", value=130, key=f"hr_v971_{i}", step=1)
             hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT WORKOUT DATA", use_container_width=True):
@@ -92,50 +90,62 @@ with tab_analysis:
         c_p, c_dur, c_dec = int(s_data['본훈련파워']), int(s_data['본훈련시간']), s_data['디커플링(%)']
         hr_recovery = hr_array[-2] - hr_array[-1]
 
-        st.markdown(f'<p class="section-title">{c_type} Performance Analysis</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="section-title">{c_type} Performance & Coaching</p>', unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         
         if c_type == "ZONE 2":
-            # [v9.62 Zone 2 Logic]
             hr_drift = np.mean(hr_array[len(hr_array)//2:-1]) - np.mean(hr_array[2:len(hr_array)//2])
             score = 0
             if c_dec < 6.0 or (c_dec < 7.5 and hr_drift < 3): score += 40
             if c_dur >= 90: score += 30; next_dur = 90
             elif c_dur >= 75: score += 20; next_dur = 90
             else: score += 10; next_dur = c_dur + 15
-            if hr_recovery > 15: score += 30
+            if hr_recovery > 20: score += 30
+            elif hr_recovery > 10: score += 15
             
             if score >= 70 and c_dur >= 90:
-                next_step = f"{c_p + 5}W 상향 & 60m 리셋"
-                msg = "90분 기초 완성! 강도를 높이고 시간을 60분으로 줄여 적응을 시작하세요."
+                next_step = f"{c_p + 5}W 상향 / 60m 리셋"
+                msg = "90분 기초가 매우 견고합니다. 파워를 올리고 60분 훈련으로 안정성을 재확인하세요."
             elif score >= 50:
                 next_step = f"{next_dur}m로 시간 증강"
-                msg = "효율이 좋습니다. 현재 파워를 유지하며 시간을 늘리세요."
+                msg = f"효율이 좋습니다. 현재 파워({c_p}W)를 유지하며 시간을 {next_dur}분으로 늘리세요."
             else:
-                next_step = "현재 단계 유지 및 다지기"
-                msg = "심박 불안정이 감지됩니다. 같은 조건에서 한 번 더 훈련하세요."
+                next_step = "현재 단계 유지 및 안정화"
+                msg = "심박 안정화가 더 필요합니다. 현재 조건에서 지표 개선에 집중하세요."
         else:
-            # [SST Logic]
             avg_hr = np.mean(hr_array[2:-1])
             sst_ef = round(c_p / avg_hr, 2)
-            next_step = f"SST 강도 유지 또는 +2W 상향"
-            msg = f"SST 평균 효율: {sst_ef}. 근지구력 강화 세션입니다. 피로도가 높다면 1회 더 유지하세요."
+            next_step = "SST 강도 유지"
+            msg = f"SST 평균 효율: {sst_ef}. 근지구력 훈련은 심박수보다 파워 유지 능력과 피로도 관리가 핵심입니다."
 
         with col1:
             st.markdown(f"""<div class="briefing-card"><span class="prescription-badge">{c_type} RESULT</span>
             <p style="margin:0; font-weight:600;">{c_p}W / {c_dur}m (Session {int(s_data['회차'])})</p>
             <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Decoupling: <b>{c_dec}%</b><br>HR Recovery: <b>{hr_recovery} bpm</b></p></div>""", unsafe_allow_html=True)
         with col2:
-            st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">COACHING</span>
-            <p style="margin:0; font-weight:600;">Next: {next_step}</p>
+            st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT STEP</span>
+            <p style="margin:0; font-weight:600;">Target: {next_step}</p>
             <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">{msg}</p></div>""", unsafe_allow_html=True)
 
-        # Graph
+        # [v9.62 Graph Style Restored]
+        st.markdown('<p class="section-title">Power & Heart Rate Correlation</p>', unsafe_allow_html=True)
         time_x = [i*5 for i in range(len(hr_array))]
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
-        fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#F4F4F5', width=2)), secondary_y=True)
-        fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350)
-        st.plotly_chart(fig, use_container_width=True)
+        p_y = [int(s_data['웜업파워']) if t < 10 else (c_p if t < 10 + c_dur else int(s_data['쿨다운파워'])) for t in time_x]
+        
+        fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+        fig1.add_trace(go.Scatter(x=time_x, y=p_y, name="Power", line=dict(color='#938172', width=4, shape='hv'), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
+        fig1.add_trace(go.Scatter(x=time_x, y=hr_array, name="Heart Rate", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
+        fig1.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
+        fig1.layout.yaxis.update(title=dict(text="Power (W)", font=dict(color="#938172")), tickfont=dict(color="#938172"))
+        fig1.layout.yaxis2.update(title=dict(text="HR (bpm)", font=dict(color="#F4F4F5")), tickfont=dict(color="#F4F4F5"), side="right", overlaying="y")
+        st.plotly_chart(fig1, use_container_width=True)
+
+        st.markdown('<p class="section-title">Efficiency Drift Analysis</p>', unsafe_allow_html=True)
+        ef_y = [round(c_p / h, 2) if h > 0 else 0 for h in hr_array]
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(x=time_x[2:-1], y=ef_y[2:-1], line=dict(color='#FF4D00', width=3), fill='tozeroy', fillcolor='rgba(255, 77, 0, 0.05)'))
+        fig2.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(fig2, use_container_width=True)
 
 # --- [TAB 3: PROGRESSION] ---
 with tab_trends:
@@ -143,8 +153,7 @@ with tab_trends:
         st.markdown('<p class="section-title">Road to FTP 3.0W/kg (Target Z2 180W)</p>', unsafe_allow_html=True)
         z2_max = df[df['훈련타입']=='ZONE 2']['본훈련파워'].max() if not df[df['훈련타입']=='ZONE 2'].empty else 0
         progress = min(100, int((z2_max / 180) * 100))
-        st.progress(progress / 100)
-        st.write(f"Current Max Zone 2: {int(z2_max)}W / Target: 180W ({progress}%)")
+        st.progress(progress / 100); st.write(f"Current Max Zone 2: {int(z2_max)}W / Target: 180W ({progress}%)")
         
         st.markdown('<p class="section-title">Workout Distribution (Phase 2 Status)</p>', unsafe_allow_html=True)
         dist = df['훈련타입'].value_counts()
