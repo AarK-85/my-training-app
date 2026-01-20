@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="Ultimate Profiler v9.84", layout="wide")
+st.set_page_config(page_title="Ultimate Profiler v9.85", layout="wide")
 
 # 2. Styling (v9.1 Magma Aesthetic)
 st.markdown("""
@@ -37,7 +37,7 @@ if not df.empty:
 
 # 4. Sidebar Archive
 with st.sidebar:
-    st.markdown("<h2 style='letter-spacing:0.1em;'>ULTIMATE LAB v9.84</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='letter-spacing:0.1em;'>ULTIMATE LAB v9.85</h2>", unsafe_allow_html=True)
     if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
         selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
@@ -65,20 +65,21 @@ with tab_entry:
         f_sst_p_data = f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0" 
     else:
         st.markdown('<p class="section-title">SST Variable Interval Designer</p>', unsafe_allow_html=True)
-        s1, s2, s3, s4 = st.columns(4)
-        f_sst_work = s1.number_input("Steady-State Power (W)", 180)
-        f_sst_rec = s2.number_input("Recovery Power (W)", 90)
-        f_sst_sets = s3.number_input("Steady-State Sets", value=2, min_value=1)
-        f_sst_work_t = s4.number_input("Steady-state Time (min/set)", value=10)
+        # [디자인 수정: 5개씩 2행으로 완벽하게 정렬]
+        row1 = st.columns(5)
+        f_sst_work = row1[0].number_input("Steady-State Power (W)", 180)
+        f_sst_rec = row1[1].number_input("Recovery Power (W)", 90)
+        f_sst_sets = row1[2].number_input("Steady-State Sets", value=2, min_value=1)
+        f_sst_work_t = row1[3].number_input("SS Time (min/set)", value=10)
+        f_sst_rec_t = row1[4].number_input("Rec. Time (min/set)", value=5)
         
-        s5, s6, s7, s8 = st.columns(4)
-        f_sst_rec_t = s5.number_input("Recovery Time (min/set)", value=5)
-        f_sst_w_s = s6.number_input("Warm-up Power Start (W)", 95)
-        f_sst_w_e = s7.number_input("Warm-up Power End (W)", 110)
-        f_sst_c_s = s8.number_input("Cool-down Power Start (W)", 100)
-        f_sst_c_e = st.number_input("Cool-down Power End (W)", 80)
+        row2 = st.columns(5)
+        f_sst_w_s = row2[0].number_input("Warm-up Start (W)", 95)
+        f_sst_w_e = row2[1].number_input("Warm-up End (W)", 110)
+        f_sst_c_s = row2[2].number_input("Cool-down Start (W)", 100)
+        f_sst_c_e = row2[3].number_input("Cool-down End (W)", 80)
+        row2[4].empty() # 마지막 빈 칸을 명시적으로 비워서 정렬 유지
         
-        # 공식: 웜업(10) + {세트 * (SS + 리커버리)} + 쿨다운(20)
         f_duration = 10 + (f_sst_sets * (f_sst_work_t + f_sst_rec_t)) + 20
         c3.info(f"Dynamic Duration: {f_duration} min")
         f_mp = f_sst_work
@@ -88,13 +89,13 @@ with tab_entry:
     st.markdown('<p class="section-title">Biometric Telemetry</p>', unsafe_allow_html=True)
     total_pts = (f_duration // 5) + 1
     hr_inputs = []
-    for row in range((total_pts + 3) // 4):
+    for row_idx in range((total_pts + 3) // 4):
         cols = st.columns(4)
-        for col in range(4):
-            idx = row * 4 + col
+        for col_idx in range(4):
+            idx = row_idx * 4 + col_idx
             if idx < total_pts:
-                with cols[col]:
-                    hv = st.number_input(f"T + {idx*5}m", value=130, key=f"hr_v984_{idx}", step=1)
+                with cols[col_idx]:
+                    hv = st.number_input(f"T + {idx*5}m", value=130, key=f"hr_v985_{idx}", step=1)
                     hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT WORKOUT DATA", use_container_width=True):
