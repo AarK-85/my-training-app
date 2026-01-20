@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="Dual-Engine Lab v9.73", layout="wide")
+st.set_page_config(page_title="Dual-Engine Lab v9.74", layout="wide")
 
 # 2. Styling (v9.1 Magma Aesthetic)
 st.markdown("""
@@ -65,7 +65,7 @@ with tab_entry:
         f_wp = p1.number_input("Warm-up (W)", 100)
         f_mp = p2.number_input("Main Target (W)", 140)
         f_cp = p3.number_input("Cool-down (W)", 90)
-        f_sst_p_data = f"{f_wp},{f_mp},{f_cp},0,0" # Placeholder for consistency
+        f_sst_p_data = f"{f_wp},{f_mp},{f_cp},0,0,0" 
     else:
         f_duration = 60 
         c3.info("SST Profile Fixed: 60 min")
@@ -81,14 +81,23 @@ with tab_entry:
         f_mp = f_sst_work
 
     st.divider()
-    st.markdown('<p class="section-title">Biometric Telemetry (5m Intervals)</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Biometric Telemetry (Horizontal Tab Order)</p>', unsafe_allow_html=True)
+    
     total_pts = ((10 + f_duration + 5) // 5) + 1
+    hr_raw = str(s_data['전체심박데이터']) if s_data is not None else ""
+    hr_list = [x.strip() for x in hr_raw.split(',') if x.strip()]
     hr_inputs = []
-    h_cols = st.columns(4)
-    for i in range(total_pts):
-        with h_cols[i % 4]:
-            hv = st.number_input(f"T + {i*5}m", value=130, key=f"hr_v973_{i}", step=1)
-            hr_inputs.append(str(int(hv)))
+
+    # [수정: 가로 방향 Tab 키 이동을 위한 행(Row) 루프]
+    for row in range((total_pts + 3) // 4): # 4개씩 한 행으로 처리
+        cols = st.columns(4)
+        for col in range(4):
+            idx = row * 4 + col
+            if idx < total_pts:
+                with cols[col]:
+                    dv = int(float(hr_list[idx])) if idx < len(hr_list) else 130
+                    hv = st.number_input(f"T + {idx*5}m", value=dv, key=f"hr_v974_{idx}", step=1)
+                    hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT WORKOUT DATA", use_container_width=True):
         m_hrs = [int(x) for x in hr_inputs[2:-1]]; mid = len(m_hrs) // 2
