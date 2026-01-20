@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="Ultimate Profiler v9.8", layout="wide")
+st.set_page_config(page_title="Ultimate Profiler v9.82", layout="wide")
 
 # 2. Styling (v9.1 Magma Aesthetic)
 st.markdown("""
@@ -21,8 +21,6 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; text-transform: uppercase; padding: 0px 25px; }
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #938172 !important; }
     .section-title { color: #938172; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #938172; padding-left: 15px; }
-    .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; min-height: 180px; height: auto; }
-    .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; display: inline-block; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -39,7 +37,7 @@ if not df.empty:
 
 # 4. Sidebar Archive
 with st.sidebar:
-    st.markdown("<h2 style='letter-spacing:0.1em;'>PHASE 3 READY LAB</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='letter-spacing:0.1em;'>ULTIMATE LAB v9.82</h2>", unsafe_allow_html=True)
     if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
         selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
@@ -64,29 +62,30 @@ with tab_entry:
         st.markdown('<p class="section-title">Zone 2 Power Settings</p>', unsafe_allow_html=True)
         p1, p2, p3 = st.columns(3)
         f_wp, f_mp, f_cp = p1.number_input("Warm-up (W)", 100), p2.number_input("Main Target (W)", 140), p3.number_input("Cool-down (W)", 90)
-        f_sst_p_data = f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0" # Type tag + Z2 data
+        f_sst_p_data = f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0" 
     else:
-        st.markdown('<p class="section-title">SST Variable Interval Designer</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-title">SST Variable Interval Designer (Phase 3 Ready)</p>', unsafe_allow_html=True)
         s1, s2, s3, s4 = st.columns(4)
         f_sst_work = s1.number_input("Work Power (W)", 180)
-        f_sst_sets = s2.number_input("Sets", value=2, min_value=1)
-        f_sst_work_t = s3.number_input("Work Time (min/set)", value=10)
-        f_sst_rec_t = s4.number_input("Rec. Time (min/set)", value=5)
+        f_sst_rec = s2.number_input("Rec. Power (W)", 90)
+        f_sst_sets = s3.number_input("Sets", value=2, min_value=1)
+        f_sst_work_t = s4.number_input("Work Time (min/set)", value=10)
         
         s5, s6, s7, s8 = st.columns(4)
-        f_sst_w_s = s5.number_input("Warm Start (W)", 95)
-        f_sst_w_e = s6.number_input("Warm End (W)", 110)
-        f_sst_c_s = s7.number_input("Cool Start (W)", 100)
-        f_sst_c_e = s8.number_input("Cool End (W)", 80)
+        f_sst_rec_t = s5.number_input("Rec. Time (min/set)", value=5)
+        f_sst_w_s = s6.number_input("Warm Start (W)", 95)
+        f_sst_w_e = s7.number_input("Warm End (W)", 110)
+        f_sst_c_s = s8.number_input("Cool Start (W)", 100)
+        f_sst_c_e = st.number_input("Cool End (W)", 80)
         
-        f_duration = 10 + (f_sst_sets * f_sst_work_t) + ((f_sst_sets - 1) * f_sst_rec_t) + 20
-        c3.info(f"Total Duration: {f_duration} min (Auto-calculated)")
+        # 총 시간 계산 로직: 웜업(10) + {세트*(워크+리커버리) - 막세트리커버리} + 쿨다운(20)
+        f_duration = 10 + (f_sst_sets * (f_sst_work_t + f_sst_rec_t)) - f_sst_rec_t + 20
+        c3.info(f"Dynamic Duration: {f_duration} min")
         f_mp = f_sst_work
-        # Type tag + SST structured data
-        f_sst_p_data = f"SST,{f_sst_w_s},{f_sst_w_e},{f_sst_work},{f_sst_rec_t},{f_sst_c_s},{f_sst_c_e},{f_sst_sets},{f_sst_work_t}"
+        f_sst_p_data = f"SST,{f_sst_w_s},{f_sst_w_e},{f_sst_work},{f_sst_rec},{f_sst_c_s},{f_sst_c_e},{f_sst_sets},{f_sst_work_t},{f_sst_rec_t}"
 
     st.divider()
-    st.markdown('<p class="section-title">Biometric Telemetry (Horizontal Tab)</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Biometric Telemetry (Horizontal Tab Navigation)</p>', unsafe_allow_html=True)
     total_pts = (f_duration // 5) + 1
     hr_inputs = []
     for row in range((total_pts + 3) // 4):
@@ -95,7 +94,7 @@ with tab_entry:
             idx = row * 4 + col
             if idx < total_pts:
                 with cols[col]:
-                    hv = st.number_input(f"T + {idx*5}m", value=130, key=f"hr_v98_{idx}", step=1)
+                    hv = st.number_input(f"T + {idx*5}m", value=130, key=f"hr_v982_{idx}", step=1)
                     hr_inputs.append(str(int(hv)))
     
     if st.button("COMMIT WORKOUT DATA", use_container_width=True):
@@ -109,35 +108,32 @@ with tab_entry:
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
-        c_type, c_p, c_dur = s_data['훈련타입'], int(s_data['본훈련파워']), int(s_data['본훈련시간'])
+        c_p, c_dur = int(s_data['본훈련파워']), int(s_data['본훈련시간'])
         p_raw = str(s_data['파워데이터상세']).split(',') if pd.notna(s_data['파워데이터상세']) and str(s_data['파워데이터상세']) != "" else []
         time_x = [i*5 for i in range(len(hr_array))]
         
-        # [Profile Reconstruction Logic]
         p_y = []
         if len(p_raw) > 0 and p_raw[0] == "SST":
-            # SST Logic: w_s, w_e, work, rec_t, c_s, c_e, sets, work_t
-            w_s, w_e, work, rec_t, c_s, c_e, sets, work_t = [float(x) for x in p_raw[1:]]
+            # w_s, w_e, work, rec, c_s, c_e, sets, work_t, rec_t
+            w_s, w_e, work, rec, c_s, c_e, sets, work_t, rec_t = [float(x) for x in p_raw[1:]]
+            main_end_t = 10 + (sets * (work_t + rec_t)) - rec_t
             for t in time_x:
                 if t < 10: p_y.append(w_s + (w_e - w_s) * (t/10))
-                elif t < 10 + (sets * work_t) + ((sets - 1) * rec_t):
-                    # Interval check
+                elif t < main_end_t:
                     rel_t = t - 10
                     cycle = work_t + rec_t
                     if rel_t % cycle < work_t: p_y.append(work)
-                    else: p_y.append(90) # Default recovery power
-                else:
-                    p_y.append(c_s - (c_s - c_e) * ((t-(10+(sets*work_t)+((sets-1)*rec_t)))/20))
+                    else: p_y.append(rec)
+                else: p_y.append(c_s - (c_s - c_e) * ((t-main_end_t)/20))
         else:
-            # Zone 2 or Legacy fallback
             p_wp = int(p_raw[1]) if len(p_raw) > 1 else 100
             p_mp = int(p_raw[2]) if len(p_raw) > 2 else c_p
             p_cp = int(p_raw[3]) if len(p_raw) > 3 else 90
             p_y = [p_wp if t < 10 else (p_mp if t < 10 + c_dur else p_cp) for t in time_x]
 
-        st.markdown(f'<p class="section-title">{c_type} Profile Visualization</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="section-title">{s_data["훈련타입"]} Performance Profile</p>', unsafe_allow_html=True)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
-        fig.add_trace(go.Scatter(x=time_x, y=p_y[:len(time_x)], name="Target", line=dict(color='#938172', width=4), fill='tozeroy', fillcolor='rgba(147, 129, 114, 0.05)'), secondary_y=False)
+        fig.add_trace(go.Scatter(x=time_x, y=p_y[:len(time_x)], name="Target", line=dict(color='#938172', width=4)), secondary_y=False)
         fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#F4F4F5', width=2, dash='dot')), secondary_y=True)
         fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=400, showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
