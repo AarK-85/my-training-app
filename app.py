@@ -7,9 +7,9 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="Ultimate Profiler v9.89", layout="wide")
+st.set_page_config(page_title="Ultimate Profiler v9.9", layout="wide")
 
-# 2. Styling (v9.1 Magma Aesthetic + Button Stability Fix)
+# 2. Styling (v9.89 Button Stability + v9.1 Aesthetic)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -17,19 +17,15 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #0c0c0e !important; }
     h1, h2, h3, p { color: #ffffff !important; font-family: 'Lexend', sans-serif; }
     
-    /* Button Stability Fix */
     .stButton > button {
         background-color: #18181b !important;
         color: #ffffff !important;
         border: 1px solid #27272a !important;
         border-radius: 8px !important;
+        width: 100% !important;
     }
-    .stButton > button:hover {
-        border-color: #FF4D00 !important;
-        color: #FF4D00 !important;
-    }
+    .stButton > button:hover { border-color: #FF4D00 !important; color: #FF4D00 !important; }
     
-    /* Tabs & Section Styles */
     .stTabs [data-baseweb="tab-list"] { gap: 12px; background-color: #0c0c0e; padding: 8px 12px; border-radius: 8px; border: 1px solid #1c1c1f; }
     .stTabs [data-baseweb="tab"] { height: 45px; background-color: #18181b; border: 1px solid #27272a; border-radius: 4px; color: #71717a; text-transform: uppercase; padding: 0px 25px; }
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #938172 !important; }
@@ -52,7 +48,7 @@ if not df.empty:
 
 # 4. Sidebar
 with st.sidebar:
-    st.markdown("<h2 style='letter-spacing:0.1em;'>ANALYST LAB v9.89</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='letter-spacing:0.1em;'>ANALYST LAB v9.9</h2>", unsafe_allow_html=True)
     if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
         selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
@@ -86,7 +82,6 @@ with tab_entry:
         f_sst_p_data = f"SST,{f_sst_w_s},{f_sst_w_e},{f_sst_work},{f_sst_rec},{f_sst_c_s},{f_sst_c_e},{f_sst_sets},{f_sst_work_t},{f_sst_rec_t}"
 
     st.divider()
-    st.markdown('<p class="section-title">Biometric Telemetry</p>', unsafe_allow_html=True)
     total_pts = (f_duration // 5) + 1
     hr_inputs = []
     for r_idx in range((total_pts + 3) // 4):
@@ -94,15 +89,15 @@ with tab_entry:
         for c_idx in range(4):
             idx = r_idx * 4 + c_idx
             if idx < total_pts:
-                with cols[c_idx]: hv = st.number_input(f"T + {idx*5}m", value=130, key=f"hr_v989_{idx}"); hr_inputs.append(str(int(hv)))
+                with cols[c_idx]: hv = st.number_input(f"T + {idx*5}m", value=130, key=f"hr_v99_{idx}"); hr_inputs.append(str(int(hv)))
     
-    if st.button("SUBMIT DATA", use_container_width=True):
+    if st.button("SUBMIT DATA"):
         m_hrs = [int(x) for x in hr_inputs[2:-1]]; mid = len(m_hrs)//2
         f_ef = f_mp / np.mean(m_hrs[:mid]) if mid>0 else 0; s_ef = f_mp / np.mean(m_hrs[mid:]) if mid>0 else 0
         new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_type, "본훈련파워": int(f_mp), "본훈련시간": int(f_duration), "디커플링(%)": round(((f_ef-s_ef)/f_ef)*100,2) if f_ef>0 else 0, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f_sst_p_data}
         conn.update(data=pd.concat([df, pd.DataFrame([new])], ignore_index=True)); st.rerun()
 
-# --- [TAB 2: PERFORMANCE (AI Coaching & Graphs)] ---
+# --- [TAB 2: PERFORMANCE (v9.87 Graph + Coach)] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
@@ -113,10 +108,9 @@ with tab_analysis:
         if c_type == "ZONE 2":
             if c_dec < 7.5:
                 if c_dur >= 90: next_p, coach_m = f"Level Up: {c_p+5}W / 60m", "90분 기초 완성. 강도 상향 단계입니다."
-                else: next_p, coach_m = f"Extend: {c_p}W / {c_dur+15}m", f"디커플링 {c_dec}%로 우수함. 시간을 늘려 지구력을 강화하세요."
-            else: next_p, coach_m = f"Maintain: {c_p}W", "심박 드리프트 개선이 필요합니다. 동일 조건 숙달 권장."
-        else:
-            next_p, coach_m = "SST Integration", "근지구력 강화 세션입니다. 인터벌 후 심박 회복 수치를 확인하세요."
+                else: next_p, coach_m = f"Extend: {c_p}W / {c_dur+15}m", f"디커플링 {c_dec}%로 우수함. 시간을 늘리세요."
+            else: next_p, coach_m = f"Maintain: {c_p}W", "현재 강도 숙달 권장."
+        else: next_p, coach_m = "SST Phase", "근지구력 세션입니다."
 
         st.markdown('<p class="section-title">AI Performance Briefing</p>', unsafe_allow_html=True)
         ca, cb = st.columns(2)
@@ -125,12 +119,11 @@ with tab_analysis:
             <p style="margin:0; font-weight:600;">Session {int(s_data['회차'])}: {c_p}W / {c_dur}m</p>
             <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">Decoupling: <b>{c_dec}%</b> | HRR: <b>{hr_recovery} bpm</b></p></div>""", unsafe_allow_html=True)
         with cb:
-            st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT PRESCRIPTION</span>
+            st.markdown(f"""<div class="briefing-card" style="border-color: #FF4D00;"><span class="prescription-badge">NEXT STEP</span>
             <p style="margin:0; font-weight:600;">{next_p}</p>
             <p style="margin:5px 0 0 0; color:#A1A1AA; font-size:0.9rem;">{coach_m}</p></div>""", unsafe_allow_html=True)
 
-        # Graph - Correlation (Dual Axis)
-        st.markdown('<p class="section-title">Correlation & Efficiency Drift</p>', unsafe_allow_html=True)
+        # 복구된 v9.87 그래프 (이중 축 & 타이틀)
         time_x = [i*5 for i in range(len(hr_array))]
         p_raw = str(s_data['파워데이터상세']).split(',') if pd.notna(s_data['파워데이터상세']) and str(s_data['파워데이터상세'])!="" else []
         p_y = []
@@ -143,21 +136,22 @@ with tab_analysis:
                 else: p_y.append(c_s - (c_s-c_e)*((t-m_e)/20))
         else: p_y = [c_p if 10 <= t <= 10+c_dur else 90 for t in time_x]
 
+        st.markdown('<p class="section-title">Correlation & Efficiency Drift</p>', unsafe_allow_html=True)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(go.Scatter(x=time_x, y=p_y, name="Power", fill='tozeroy', line=dict(color='#938172', width=4)), secondary_y=False)
         fig.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#F4F4F5', dash='dot')), secondary_y=True)
-        fig.update_layout(template="plotly_dark", height=400, showlegend=False, xaxis_title="Time (min)")
+        fig.update_layout(template="plotly_dark", height=400, showlegend=False, xaxis_title="Elapsed Time (min)")
         fig.update_yaxes(title_text="Power (W)", secondary_y=False, title_font=dict(color="#938172"))
-        fig.update_yaxes(title_text="HR (bpm)", secondary_y=True, title_font=dict(color="#F4F4F5"))
+        fig.update_yaxes(title_text="Heart Rate (bpm)", secondary_y=True, title_font=dict(color="#F4F4F5"))
         st.plotly_chart(fig, use_container_width=True)
 
-# --- [TAB 3: PROGRESSION (85kg Fixed)] ---
+# --- [TAB 3: PROGRESSION (v9.87 복구)] ---
 with tab_trends:
     if not df.empty:
-        st.markdown('<p class="section-title">W/kg Growth (Target 3.0W/kg @ 85kg)</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-title">Power-to-Weight Ratio (85kg Fixed)</p>', unsafe_allow_html=True)
         df['Wkg'] = df['본훈련파워'] / 85
         fig_wkg = go.Figure()
         fig_wkg.add_trace(go.Scatter(x=df['회차'], y=df['Wkg'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy'))
-        fig_wkg.add_hline(y=3.0, line_dash="dash", line_color="white")
-        fig_wkg.update_layout(template="plotly_dark", height=300, yaxis_range=[1.5, 3.5], xaxis_title="Session No.", yaxis_title="W/kg")
+        fig_wkg.add_hline(y=3.0, line_dash="dash", line_color="white", annotation_text="3.0W/kg Goal")
+        fig_wkg.update_layout(template="plotly_dark", height=350, xaxis_title="Session No.", yaxis_title="W/kg", yaxis_range=[1.5, 3.5])
         st.plotly_chart(fig_wkg, use_container_width=True)
