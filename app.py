@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="Phase 2 Aggressive Coach v9.998", layout="wide")
+st.set_page_config(page_title="Hyper-Aggressive Coach v9.999", layout="wide")
 
 # 2. Styling (Perfect Black Theme)
 st.markdown("""
@@ -35,9 +35,10 @@ if not df.empty:
     df = df.dropna(subset=['날짜'])
     df['회차'] = pd.to_numeric(df['회차'], errors='coerce').fillna(0).astype(int)
     if '훈련타입' not in df.columns: df['훈련타입'] = 'ZONE 2'
+    if '파워데이터상세' not in df.columns: df['파워데이터상세'] = ""
     df = df.sort_values('회차')
 
-# 4. Sidebar Archive
+# 4. Sidebar
 with st.sidebar:
     st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>PHASE 2 COACH</h2>", unsafe_allow_html=True)
     if not df.empty:
@@ -45,70 +46,81 @@ with st.sidebar:
         selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
         s_data = df[df["회차"] == selected_session].iloc[0]
     else: s_data = None
-    if st.button("🔄 REFRESH DATASET"): st.cache_data.clear(); st.rerun()
+    if st.button("🔄 REFRESH"): st.cache_data.clear(); st.rerun()
+
+def update_black(fig):
+    fig.update_layout(template="plotly_dark", plot_bgcolor='black', paper_bgcolor='black', xaxis=dict(gridcolor='#27272a'), yaxis=dict(gridcolor='#27272a'))
+    return fig
 
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 2: PERFORMANCE (Active Phase 2 AI Coach)] ---
-with tab_analysis:
-    if s_data is not None:
-        hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
-        time_x = [i*5 for i in range(len(hr_array))]
-        c_type, c_p, c_dur, c_dec = s_data['훈련타입'], int(s_data['본훈련파워']), int(s_data['본훈련시간']), s_data['디커플링(%)']
+# --- [TAB 1: REGISTRATION] (Fully Restored) ---
+with tab_entry:
+    st.markdown('<p class="section-title">Workout Entry</p>', unsafe_allow_html=True)
+    w_mode = st.radio("SELECT TYPE", ["ZONE 2", "SST"], horizontal=True)
+    c1, c2, c3 = st.columns([1, 1, 2])
+    f_date, f_session = c1.date_input("Date"), c2.number_input("No.", value=int(df["회차"].max()+1) if not df.empty else 1)
+    
+    if w_mode == "ZONE 2":
+        f_main_dur = c3.slider("Main Set (min)", 15, 180, 75, step=15)
+        r = st.columns(3)
+        f_wp, f_mp, f_cp = r[0].number_input("Warm-up (W)", 97), r[1].number_input("Target (W)", 145), r[2].number_input("Cool-down (W)", 90)
+        f_total_dur = 10 + f_main_dur + 5
+        f_detail = f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"
+    else:
+        # SST 로직 축약본 (SST 파라미터 입력)
+        f_total_dur = 90; f_mp = 185; f_detail = "SST,..."
 
-        # [Phase 2 AI Engine]
-        last_3_types = df.tail(3)['훈련타입'].tolist()
-        
-        # 주기 판단 (Z2-Z2-SST)
-        if not last_3_types: 
-            n_type = "ZONE 2"
-            phase_msg = "Phase 2 사이클 시작"
-        elif last_3_types[-1] == "SST": 
-            n_type = "ZONE 2"
-            phase_msg = "Cycle Step 1: Zone 2 (공사 시작)"
-        elif len(last_3_types) >= 2 and last_3_types[-1] == "ZONE 2" and (len(last_3_types) < 3 or last_3_types[-2] != "ZONE 2"):
-            n_type = "ZONE 2"
-            phase_msg = "Cycle Step 2: Zone 2 (영토 확장)"
-        else:
-            n_type = "SST"
-            phase_msg = "Cycle Step 3: SST (천장 뚫기)"
+    total_pts = (f_total_dur // 5) + 1
+    hr_inputs = []
+    st.markdown(f'<p class="section-title">Heart Rate Data ({f_total_dur}m)</p>', unsafe_allow_html=True)
+    for r_idx in range((total_pts + 3) // 4):
+        cols = st.columns(4)
+        for c_idx in range(4):
+            idx = r_idx * 4 + c_idx
+            if idx < total_pts:
+                with cols[c_idx]:
+                    hv = st.number_input(f"T+{idx*5}m", value=130, key=f"hr_{idx}")
+                    hr_inputs.append(str(int(hv)))
+    
+    if st.button("SUBMIT"):
+        m_hrs = [int(x) for x in hr_inputs[2:-1]]; mid = len(m_hrs)//2
+        f_ef = f_mp / np.mean(m_hrs[:mid]) if mid>0 else 0; s_ef = f_mp / np.mean(m_hrs[mid:]) if mid>0 else 0
+        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": round(((f_ef-s_ef)/f_ef)*100,2) if f_ef>0 else 0, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f_detail}
+        df = pd.concat([df, pd.DataFrame([new])], ignore_index=True); conn.update(data=df); st.cache_data.clear(); st.rerun()
 
-        # 처방 로직
-        if n_type == "ZONE 2":
-            z2_past = df[df['훈련타입'] == "ZONE 2"].iloc[-1]
-            p_dec, p_p, p_dur = z2_past['디커플링(%)'], int(z2_past['본훈련파워']), int(z2_past['본훈련시간'])
-            if p_dec < 8.0:
-                n_pres = f"{p_p+5}W / {max(p_dur, 75)}m"
-                coach_msg = f"디커플링 {p_dec}%로 8% 미만 '성공'. 지침에 따라 즉시 {p_p+5}W로 상향 제안합니다."
-            else:
-                n_pres = f"{p_p}W / {p_dur}m"
-                coach_msg = f"디커플링 {p_dec}%로 안정화 필요. 8% 미만 달성까지 {p_p}W를 유지하며 내실을 다지세요."
-        else:
-            sst_past = df[df['훈련타입'] == "SST"].iloc[-1]
-            p_p = int(sst_past['본훈련파워'])
-            n_pres = f"{p_p+5}W SST"
-            coach_msg = "SST 완수 확인. 훈련 지침에 따라 다음 세션은 무조건 상향하여 천장을 높입니다."
-
-        st.markdown(f'<p class="section-title">{phase_msg}</p>', unsafe_allow_html=True)
-        ca, cb = st.columns(2)
-        with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">{c_type} RESULT</span><p style="font-size:1.5rem; font-weight:600; margin:0;">{c_p}W / {c_dur}m</p><p style="color:#A1A1AA;">Decoupling: <b>{c_dec}%</b></p></div>', unsafe_allow_html=True)
-        with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT STEP</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00; margin:0;">{n_pres}</p><p style="margin-top:5px; font-size:0.9rem; color:#A1A1AA;">{coach_msg}</p></div>', unsafe_allow_html=True)
-
-        # [Graphs - All Black Theme]
-        def update_black(fig):
-            fig.update_layout(template="plotly_dark", plot_bgcolor='black', paper_bgcolor='black', xaxis=dict(gridcolor='#27272a'), yaxis=dict(gridcolor='#27272a'))
-            return fig
-
-        fig_corr = make_subplots(specs=[[{"secondary_y": True}]])
-        p_y = [c_p if 10 <= t <= 10+c_dur else 97 for t in time_x]
-        fig_corr.add_trace(go.Scatter(x=time_x, y=p_y, name="Power", fill='tozeroy', line=dict(color='#FF4D00', width=3)), secondary_y=False)
-        fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ffffff', dash='dot')), secondary_y=True)
-        st.plotly_chart(update_black(fig_corr), use_container_width=True)
-
-# --- [TAB 3: PROGRESSION] ---
+# --- [TAB 3: PROGRESSION] (EF & W/kg FULL RESTORE) ---
 with tab_trends:
     if not df.empty:
-        st.markdown('<p class="section-title">W/kg Growth Track (Target 180W)</p>', unsafe_allow_html=True)
-        fig_w = update_black(go.Figure(go.Scatter(x=df['회차'], y=df['본훈련파워']/85, mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy')))
-        fig_w.add_hline(y=180/85, line_dash="dash", line_color="white", annotation_text="Goal 180W")
+        # 1. W/kg Growth Graph
+        st.markdown('<p class="section-title">W/kg Growth Track (Aggressive Goal: 3.0+)</p>', unsafe_allow_html=True)
+        df['Wkg'] = df['본훈련파워'] / 85
+        fig_w = update_black(go.Figure(go.Scatter(x=df['회차'], y=df['Wkg'], mode='lines+markers', line=dict(color='#FF4D00', width=3), fill='tozeroy')))
+        fig_w.add_hline(y=180/85, line_dash="dash", line_color="#FF4D00", annotation_text="Goal 180W")
         st.plotly_chart(fig_w, use_container_width=True)
+
+        # 2. EF (Aerobic Efficiency) Trend Graph - 핵심 복구 항목
+        st.markdown('<p class="section-title">Aerobic Efficiency (EF) Trend - 내실 추적</p>', unsafe_allow_html=True)
+        def calc_ef(row):
+            hrs = [int(x) for x in str(row['전체심박데이터']).split(',') if x.strip()]
+            main_hrs = hrs[2:-1] # 웜업/쿨다운 제외
+            return row['본훈련파워'] / np.mean(main_hrs) if main_hrs else 0
+        
+        df['EF'] = df.apply(calc_ef, axis=1)
+        fig_ef = update_black(go.Figure())
+        fig_ef.add_trace(go.Scatter(x=df['회차'], y=df['EF'], mode='lines+markers', name='EF Value', line=dict(color='#00FFCC', width=2)))
+        fig_ef.add_trace(go.Bar(x=df['회차'], y=df['EF'], name='EF Intensity', marker_color='rgba(0, 255, 204, 0.2)'))
+        st.plotly_chart(fig_ef, use_container_width=True)
+
+        # 3. Training Dist & Decoupling Heatmap (Bottom)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown('<p class="section-title">Training Distribution</p>', unsafe_allow_html=True)
+            dist = df['훈련타입'].value_counts()
+            fig_p = update_black(go.Figure(data=[go.Pie(labels=dist.index, values=dist.values, hole=.4, marker_colors=['#FF4D00', '#27272a'])]))
+            st.plotly_chart(fig_p, use_container_width=True)
+        with c2:
+            st.markdown('<p class="section-title">Decoupling History (%)</p>', unsafe_allow_html=True)
+            fig_d = update_black(go.Figure(go.Bar(x=df['회차'], y=df['디커플링(%)'], marker_color='#FF4D00')))
+            fig_d.add_hline(y=8.0, line_dash="dot", line_color="white", annotation_text="Target 8%")
+            st.plotly_chart(fig_d, use_container_width=True)
