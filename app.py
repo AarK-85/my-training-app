@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="Hyper-Aggressive Coach v9.991", layout="wide")
+st.set_page_config(page_title="FTP 3.0 Project v9.991", layout="wide")
 
 # 2. Styling (Perfect Black Theme)
 st.markdown("""
@@ -39,7 +39,7 @@ if not df.empty:
 
 # Sidebar
 with st.sidebar:
-    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>PHASE 2 COACH</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>3.0W/kg PROJECT</h2>", unsafe_allow_html=True)
     if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
         selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
@@ -53,9 +53,9 @@ def update_black(fig):
 
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION] (5.8% Logic Fixed) ---
+# --- [TAB 1: REGISTRATION] (Dynamic Section Logic) ---
 with tab_entry:
-    st.markdown('<p class="section-title">Workout Entry</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">New Workout Entry</p>', unsafe_allow_html=True)
     w_mode = st.radio("SELECT TYPE", ["ZONE 2", "SST"], horizontal=True)
     c1, c2, c3 = st.columns([1, 1, 2])
     f_date, f_session = c1.date_input("Date"), c2.number_input("No.", value=int(df["회차"].max()+1) if not df.empty else 1)
@@ -63,7 +63,7 @@ with tab_entry:
     if w_mode == "ZONE 2":
         f_main_dur = c3.slider("Main Set (min)", 15, 180, 75, step=15)
         r = st.columns(3)
-        f_wp, f_mp, f_cp = r[0].number_input("Warm-up (W)", 97), r[1].number_input("Target (W)", 145), r[2].number_input("Cool-down (W)", 90)
+        f_wp, f_mp, f_cp = r[0].number_input("WU (W)", 97), r[1].number_input("Target (W)", 145), r[2].number_input("CD (W)", 90)
         f_total_dur = 10 + f_main_dur + 5
     else: f_total_dur = 90; f_mp = 185
 
@@ -76,9 +76,8 @@ with tab_entry:
     
     if st.button("SUBMIT"):
         all_hr = [int(x) for x in hr_inputs]
-        # 90분 기준 19개 포인트: [0, 5, 10(idx 2), ..., 85(idx 17), 90(idx 18)]
-        # 본세션 정밀 추출: 인덱스 2번부터 17번까지 (T+10m ~ T+85m)
-        main_hr = all_hr[2:18] 
+        # 웜업 10분(2포인트) 이후부터 쿨다운 5분(마지막 1포인트) 전까지가 본세션
+        main_hr = all_hr[2:-1] 
         split = len(main_hr) // 2
         ef1 = f_mp / np.mean(main_hr[:split])
         ef2 = f_mp / np.mean(main_hr[split:])
@@ -87,7 +86,7 @@ with tab_entry:
         new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"}
         df = pd.concat([df, pd.DataFrame([new])], ignore_index=True); conn.update(data=df); st.cache_data.clear(); st.rerun()
 
-# --- [TAB 2: PERFORMANCE (Full Restoration)] ---
+# --- [TAB 2: PERFORMANCE (Full Restore)] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
@@ -107,7 +106,7 @@ with tab_analysis:
         fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ffffff', dash='dot')), secondary_y=True)
         st.plotly_chart(fig_corr, use_container_width=True)
 
-# --- [TAB 3: PROGRESSION (EF & W/kg Restoration)] ---
+# --- [TAB 3: PROGRESSION (Full Restore)] ---
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">W/kg Track (Target 3.0)</p>', unsafe_allow_html=True)
@@ -117,8 +116,10 @@ with tab_trends:
 
         st.markdown('<p class="section-title">EF (Efficiency) Trend</p>', unsafe_allow_html=True)
         def get_ef(r):
-            hrs = [int(x) for x in str(r['전체심박데이터']).split(',') if x.strip()][2:18]
-            return r['본훈련파워'] / np.mean(hrs) if hrs else 0
+            hrs = [int(x) for x in str(r['전체심박데이터']).split(',') if x.strip()]
+            # 동적으로 본세션 추출 (2:-1)
+            main = hrs[2:-1]
+            return r['본훈련파워'] / np.mean(main) if main else 0
         df['EF'] = df.apply(get_ef, axis=1)
         fig_ef = update_black(go.Figure())
         fig_ef.add_trace(go.Bar(x=df['회차'], y=df['EF'], name='Intensity', marker_color='rgba(0, 255, 204, 0.2)'))
