@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="FTP 3.0 Project v9.991", layout="wide")
+st.set_page_config(page_title="Hyper-Aggressive Coach v9.991", layout="wide")
 
 # 2. Styling (Perfect Black Theme)
 st.markdown("""
@@ -22,7 +22,7 @@ st.markdown("""
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #FF4D00 !important; }
     .section-title { color: #FF4D00; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #FF4D00; padding-left: 15px; }
     .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; height: 180px; border-left: 5px solid #FF4D00; }
-    .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; width: fit-content; }
+    .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; display: inline-block; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -35,12 +35,11 @@ if not df.empty:
     df = df.dropna(subset=['날짜'])
     df['회차'] = pd.to_numeric(df['회차'], errors='coerce').fillna(0).astype(int)
     if '훈련타입' not in df.columns: df['훈련타입'] = 'ZONE 2'
-    if '파워데이터상세' not in df.columns: df['파워데이터상세'] = ""
     df = df.sort_values('회차')
 
-# 4. Sidebar
+# Sidebar
 with st.sidebar:
-    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>3.0W/kg PROJECT</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>PHASE 2 COACH</h2>", unsafe_allow_html=True)
     if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
         selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
@@ -54,9 +53,9 @@ def update_black(fig):
 
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION] (Precision Fixed) ---
+# --- [TAB 1: REGISTRATION] (5.8% Logic Fixed) ---
 with tab_entry:
-    st.markdown('<p class="section-title">New Workout Entry</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Workout Entry</p>', unsafe_allow_html=True)
     w_mode = st.radio("SELECT TYPE", ["ZONE 2", "SST"], horizontal=True)
     c1, c2, c3 = st.columns([1, 1, 2])
     f_date, f_session = c1.date_input("Date"), c2.number_input("No.", value=int(df["회차"].max()+1) if not df.empty else 1)
@@ -64,11 +63,9 @@ with tab_entry:
     if w_mode == "ZONE 2":
         f_main_dur = c3.slider("Main Set (min)", 15, 180, 75, step=15)
         r = st.columns(3)
-        f_wp, f_mp, f_cp = r[0].number_input("WU (W)", 97), r[1].number_input("Target (W)", 145), r[2].number_input("CD (W)", 90)
+        f_wp, f_mp, f_cp = r[0].number_input("Warm-up (W)", 97), r[1].number_input("Target (W)", 145), r[2].number_input("Cool-down (W)", 90)
         f_total_dur = 10 + f_main_dur + 5
-        f_detail = f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"
-    else:
-        f_total_dur = 90; f_mp = 185; f_detail = "SST,..."
+    else: f_total_dur = 90; f_mp = 185
 
     total_pts = (f_total_dur // 5) + 1
     hr_inputs = []
@@ -79,29 +76,30 @@ with tab_entry:
     
     if st.button("SUBMIT"):
         all_hr = [int(x) for x in hr_inputs]
-        # 90분(19개 포인트) 중 본세션만 추출 (T+10 ~ T+85)
+        # 90분 기준 19개 포인트: [0, 5, 10(idx 2), ..., 85(idx 17), 90(idx 18)]
+        # 본세션 정밀 추출: 인덱스 2번부터 17번까지 (T+10m ~ T+85m)
         main_hr = all_hr[2:18] 
         split = len(main_hr) // 2
         ef1 = f_mp / np.mean(main_hr[:split])
         ef2 = f_mp / np.mean(main_hr[split:])
         dec = round(((ef1 - ef2) / ef1) * 100, 2)
         
-        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f_detail}
+        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"}
         df = pd.concat([df, pd.DataFrame([new])], ignore_index=True); conn.update(data=df); st.cache_data.clear(); st.rerun()
 
-# --- [TAB 2: PERFORMANCE (Full Restore)] ---
+# --- [TAB 2: PERFORMANCE (Full Restoration)] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         time_x = [i*5 for i in range(len(hr_array))]
         c_p, c_dec, c_dur = int(s_data['본훈련파워']), s_data['디커플링(%)'], int(s_data['본훈련시간'])
 
-        n_pres, coach_msg = (f"{c_p+5}W", "8% 미만 성공! 즉시 상향.") if c_dec < 8.0 else (f"{c_p}W", "8% 이상 기록. 내실 다지기.")
+        n_pres, coach_msg = (f"{c_p+5}W", "8% 미만 성공! 즉시 상향.") if c_dec < 8.0 else (f"{c_p}W", "내실 다지기.")
         
         st.markdown(f'<p class="section-title">Coaching Briefing (Session {selected_session})</p>', unsafe_allow_html=True)
         ca, cb = st.columns(2)
-        with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">RESULT</span><p style="font-size:1.5rem; font-weight:600; margin:0;">{c_p}W ({c_dec}%)</p><p style="color:#A1A1AA; font-size:0.9rem;">Duration: {c_dur}m</p></div>', unsafe_allow_html=True)
-        with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT STEP</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00; margin:0;">{n_pres}</p><p style="font-size:0.9rem; color:#A1A1AA;">{coach_msg}</p></div>', unsafe_allow_html=True)
+        with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">RESULT</span><p style="font-size:1.5rem; font-weight:600; margin:0;">{c_p}W ({c_dec}%)</p></div>', unsafe_allow_html=True)
+        with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00; margin:0;">{n_pres}</p><p>{coach_msg}</p></div>', unsafe_allow_html=True)
 
         fig_corr = update_black(make_subplots(specs=[[{"secondary_y": True}]]))
         p_y = [c_p if 10 <= t <= 10+c_dur else 97 for t in time_x]
@@ -109,7 +107,7 @@ with tab_analysis:
         fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ffffff', dash='dot')), secondary_y=True)
         st.plotly_chart(fig_corr, use_container_width=True)
 
-# --- [TAB 3: PROGRESSION (EF & W/kg Restore)] ---
+# --- [TAB 3: PROGRESSION (EF & W/kg Restoration)] ---
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">W/kg Track (Target 3.0)</p>', unsafe_allow_html=True)
