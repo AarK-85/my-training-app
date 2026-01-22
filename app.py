@@ -7,9 +7,9 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="FTP 3.0W/kg Project v9.991", layout="wide")
+st.set_page_config(page_title="FTP 3.0 Project v9.991", layout="wide")
 
-# 2. Styling (Perfect Black Theme & Unified UI)
+# 2. Styling (Perfect Black Theme)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -54,9 +54,9 @@ def update_black(fig):
 
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION] (Fully Restored & Fixed) ---
+# --- [TAB 1: REGISTRATION] ---
 with tab_entry:
-    st.markdown('<p class="section-title">New Workout Entry</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Workout Entry</p>', unsafe_allow_html=True)
     w_mode = st.radio("SELECT TYPE", ["ZONE 2", "SST"], horizontal=True)
     c1, c2, c3 = st.columns([1, 1, 2])
     f_date, f_session = c1.date_input("Date"), c2.number_input("No.", value=int(df["회차"].max()+1) if not df.empty else 1)
@@ -87,27 +87,35 @@ with tab_entry:
                     hr_inputs.append(str(int(hv)))
     
     if st.button("SUBMIT"):
-        main_hr_data = [int(x) for x in hr_inputs[3:-1]] 
-        split_idx = len(main_hr_data) // 2
-        ef1 = f_mp / np.mean(main_hr_data[:split_idx]) if split_idx > 0 else 0
-        ef2 = f_mp / np.mean(main_hr_data[split_idx:]) if split_idx > 0 else 0
-        decoupling = round(((ef1 - ef2) / ef1) * 100, 2) if ef1 > 0 else 0
-        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": decoupling, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f_detail}
-        df = pd.concat([df, pd.DataFrame([new])], ignore_index=True); conn.update(data=df); st.cache_data.clear(); st.rerun()
+        main_hr_data = [int(x) for x in hr_inputs[3:-1]] # WU 10m/CD 5m 제외
+        split = len(main_hr_data)//2
+        ef1 = f_mp / np.mean(main_hr_data[:split]) if split > 0 else 0
+        ef2 = f_mp / np.mean(main_hr_data[split:]) if split > 0 else 0
+        dec = round(((ef1-ef2)/ef1)*100, 2) if ef1 > 0 else 0
+        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f_detail}
+        pd.concat([df, pd.DataFrame([new])], ignore_index=True).pipe(conn.update); st.cache_data.clear(); st.rerun()
 
-# --- [TAB 2: PERFORMANCE (Dynamic Coach)] ---
+# --- [TAB 2: PERFORMANCE (Full Restore)] ---
 with tab_analysis:
     if s_data is not None:
-        c_p, c_dec, c_type = int(s_data['본훈련파워']), s_data['디커플링(%)'], s_data['훈련타입']
-        # 절대 원칙 반영 (Z2 8% / SST 완수)
+        hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
+        time_x = [i*5 for i in range(len(hr_array))]
+        c_p, c_dec, c_type, c_dur = int(s_data['본훈련파워']), s_data['디커플링(%)'], s_data['훈련타입'], int(s_data['본훈련시간'])
+
         if c_type == "ZONE 2":
             n_pres, coach_msg = (f"{c_p+5}W", "8% 미만 성공! 즉시 상향.") if c_dec < 8.0 else (f"{c_p}W", "8% 이상 기록. 내실 다지기.")
         else: n_pres, coach_msg = f"{c_p+5}W", "SST 완수 확인. 무조건 상향."
         
-        st.markdown(f'<p class="section-title">Aggressive Coaching</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="section-title">Coaching Briefing (Session {selected_session})</p>', unsafe_allow_html=True)
         ca, cb = st.columns(2)
         with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">RESULT</span><p style="font-size:1.5rem; font-weight:600;">{c_p}W ({c_dec}%)</p></div>', unsafe_allow_html=True)
         with cb: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">NEXT</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00;">{n_pres}</p><p>{coach_msg}</p></div>', unsafe_allow_html=True)
+
+        fig_corr = update_black(make_subplots(specs=[[{"secondary_y": True}]]))
+        p_y = [c_p if 10 <= t <= 10+c_dur else 97 for t in time_x]
+        fig_corr.add_trace(go.Scatter(x=time_x, y=p_y, name="Power", fill='tozeroy', line=dict(color='#FF4D00', width=3)), secondary_y=False)
+        fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ffffff', dash='dot')), secondary_y=True)
+        st.plotly_chart(fig_corr, use_container_width=True)
 
 # --- [TAB 3: PROGRESSION (Full Restore)] ---
 with tab_trends:
@@ -123,6 +131,6 @@ with tab_trends:
             return r['본훈련파워'] / np.mean(hrs) if hrs else 0
         df['EF'] = df.apply(get_ef, axis=1)
         fig_ef = update_black(go.Figure())
-        fig_ef.add_trace(go.Bar(x=df['회차'], y=df['EF'], name='EF Intensity', marker_color='rgba(0, 255, 204, 0.2)'))
-        fig_ef.add_trace(go.Scatter(x=df['회차'], y=df['EF'], name='EF Trend', line=dict(color='#00FFCC', width=2)))
+        fig_ef.add_trace(go.Bar(x=df['회차'], y=df['EF'], name='Intensity', marker_color='rgba(0, 255, 204, 0.2)'))
+        fig_ef.add_trace(go.Scatter(x=df['회차'], y=df['EF'], name='Trend', line=dict(color='#00FFCC', width=2)))
         st.plotly_chart(fig_ef, use_container_width=True)
