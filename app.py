@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Hyper-Aggressive Coach v9.991", layout="wide")
 
-# 2. Styling (Perfect Black Theme & Compact GUI Restored)
+# 2. Styling (Perfect Black Theme & Compact GUI & Fixed Box Size)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -23,7 +23,6 @@ st.markdown("""
     .section-title { color: #FF4D00; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #FF4D00; padding-left: 15px; }
     .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; height: 180px; border-left: 5px solid #FF4D00; }
     .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; display: inline-block; }
-    /* GUI 원상복구: 넘버 인풋 콤팩트 스타일 */
     div[data-testid="stNumberInput"] label { font-size: 0.8rem !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -39,7 +38,7 @@ if not df.empty:
     if '훈련타입' not in df.columns: df['훈련타입'] = 'ZONE 2'
     df = df.sort_values('회차')
 
-# Sidebar
+# 4. Sidebar Archive
 with st.sidebar:
     st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>PHASE 2 COACH</h2>", unsafe_allow_html=True)
     if not df.empty:
@@ -55,7 +54,7 @@ def update_black(fig):
 
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION] (5.8% Precision Logic & Compact GUI) ---
+# --- [TAB 1: REGISTRATION] (The "5.8%" Mathematics) ---
 with tab_entry:
     st.markdown('<p class="section-title">Workout Entry</p>', unsafe_allow_html=True)
     w_mode = st.radio("SELECT TYPE", ["ZONE 2", "SST"], horizontal=True)
@@ -72,7 +71,6 @@ with tab_entry:
     total_pts = (f_total_dur // 5) + 1
     hr_inputs = []
     st.markdown(f'<p class="section-title">HR Input ({f_total_dur}m)</p>', unsafe_allow_html=True)
-    # 사용자 지침: GUI 4열 정렬 콤팩트 원상복구
     for r_idx in range((total_pts + 3) // 4):
         cols = st.columns(4)
         for c_idx in range(4):
@@ -84,18 +82,21 @@ with tab_entry:
     
     if st.button("SUBMIT"):
         all_hr = [int(x) for x in hr_inputs]
-        # [정밀 로직] T+10(idx 2) 이후부터 마지막 쿨다운 5분(idx -1) 전까지가 본세션
-        # 90분 기준 [10분, 15분, ..., 85분] 총 16개 포인트 정확히 추출
+        # [THE 5.8% PRECISION LOGIC]
+        # 10분 데이터(idx 2) ~ 85분 데이터(idx 17) 정확히 16개 추출
         main_hr = all_hr[2:18] 
-        mid = len(main_hr) // 2
-        ef1 = f_mp / np.mean(main_hr[:mid])
-        ef2 = f_mp / np.mean(main_hr[mid:])
+        split = len(main_hr) // 2
+        first_half_avg = np.mean(main_hr[:split])
+        second_half_avg = np.mean(main_hr[split:])
+        
+        ef1 = f_mp / first_half_avg
+        ef2 = f_mp / second_half_avg
         dec = round(((ef1 - ef2) / ef1) * 100, 2)
         
         new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"}
         df = pd.concat([df, pd.DataFrame([new])], ignore_index=True); conn.update(data=df); st.cache_data.clear(); st.rerun()
 
-# --- [TAB 2: PERFORMANCE (Full Restoration)] ---
+# --- [TAB 2: PERFORMANCE (Restored)] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
@@ -114,7 +115,7 @@ with tab_analysis:
         fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ffffff', dash='dot')), secondary_y=True)
         st.plotly_chart(fig_corr, use_container_width=True)
 
-# --- [TAB 3: PROGRESSION (EF & W/kg Fully Restored)] ---
+# --- [TAB 3: PROGRESSION (Restored)] ---
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">W/kg Track (Target 3.0)</p>', unsafe_allow_html=True)
@@ -125,7 +126,7 @@ with tab_trends:
         st.markdown('<p class="section-title">EF (Efficiency) Trend</p>', unsafe_allow_html=True)
         def get_ef(r):
             hrs = [int(x) for x in str(r['전체심박데이터']).split(',') if x.strip()]
-            main = hrs[2:-1] # 본세션 데이터만 추출
+            main = hrs[2:18]
             return r['본훈련파워'] / np.mean(main) if main else 0
         df['EF'] = df.apply(get_ef, axis=1)
         fig_ef = update_black(go.Figure())
