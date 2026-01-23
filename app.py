@@ -4,12 +4,11 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
-from datetime import datetime
 
 # 1. Page Configuration
 st.set_page_config(page_title="FTP 3.0 Project v9.991", layout="wide")
 
-# 2. Styling (Perfect Black Theme & Compact GUI Restored)
+# 2. Styling (Perfect Black Theme & Restored Compact GUI)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -35,12 +34,11 @@ if not df.empty:
     df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce').dt.date
     df = df.dropna(subset=['날짜'])
     df['회차'] = pd.to_numeric(df['회차'], errors='coerce').fillna(0).astype(int)
-    if '훈련타입' not in df.columns: df['훈련타입'] = 'ZONE 2'
     df = df.sort_values('회차')
 
-# Sidebar
+# 4. Sidebar Archive
 with st.sidebar:
-    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>3.0W/kg PROJECT</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>PHASE 2 COACH</h2>", unsafe_allow_html=True)
     if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
         selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
@@ -54,7 +52,7 @@ def update_black(fig):
 
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION] (Hard-Coded 5.8% Logic) ---
+# --- [TAB 1: REGISTRATION] (Flexible Decoupling Logic) ---
 with tab_entry:
     st.markdown('<p class="section-title">Workout Entry</p>', unsafe_allow_html=True)
     w_mode = st.radio("SELECT TYPE", ["ZONE 2", "SST"], horizontal=True)
@@ -80,30 +78,36 @@ with tab_entry:
                     hv = st.number_input(f"T+{idx*5}m", value=130, key=f"hr_{idx}")
                     hr_inputs.append(str(int(hv)))
     
-    if st.button("SUBMIT"):
+    if st.button("SUBMIT DATA"):
         h = [int(x) for x in hr_inputs]
-        # [HARD-CODED 5.8% LOGIC] 
-        # T+10(h[2]) ~ T+85(h[17]) 총 16개 데이터를 명시적으로 8개씩 합산
-        sum1 = h[2]+h[3]+h[4]+h[5]+h[6]+h[7]+h[8]+h[9]
-        sum2 = h[10]+h[11]+h[12]+h[13]+h[14]+h[15]+h[16]+h[17]
+        # [FLEXIBLE STEADY-STATE LOGIC]
+        # 1. 웜업(10분)과 쿨다운(5분)을 제외한 본 훈련 구간 인덱스 추출
+        main_hr = h[2:-1] 
+        # 2. 본 훈련 중 초기 과도기와 후반 피크를 걷어내기 위해 양 끝 10~15% 제거 (동적 슬라이싱)
+        # 75분 훈련(15개 포인트) 기준, 앞뒤 1개씩 제거하여 Steady State(13개) 확보
+        ss_start = max(1, len(main_hr) // 10)
+        ss_end = len(main_hr) - ss_start
+        steady_state_hr = main_hr[ss_start:ss_end]
         
-        avg1 = sum1 / 8
-        avg2 = sum2 / 8
+        # 3. 정확히 이등분하여 계산
+        mid = len(steady_state_hr) // 2
+        first_half = steady_state_hr[:mid]
+        second_half = steady_state_hr[mid:]
         
-        ef1 = f_mp / avg1
-        ef2 = f_mp / avg2
-        dec = round(((ef1 - ef2) / ef1) * 100, 2)
+        avg1 = sum(first_half) / len(first_half)
+        avg2 = sum(second_half) / len(second_half)
+        dec = round((( (f_mp/avg1) - (f_mp/avg2) ) / (f_mp/avg1)) * 100, 2)
         
-        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"}
+        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": f_main_dur, "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"}
         df = pd.concat([df, pd.DataFrame([new])], ignore_index=True); conn.update(data=df); st.cache_data.clear(); st.rerun()
 
-# --- [TAB 2: PERFORMANCE] ---
+# --- [TAB 2: PERFORMANCE (Restored)] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         time_x = [i*5 for i in range(len(hr_array))]
         c_p, c_dec, c_dur = int(s_data['본훈련파워']), s_data['디커플링(%)'], int(s_data['본훈련시간'])
-        n_pres, coach_msg = (f"{c_p+5}W", "8% 미만 성공! 즉시 상향.") if c_dec < 8.0 else (f"{c_p}W", "내실 다지기.")
+        n_pres, coach_msg = (f"{c_p+5}W", "8% 미만 성공! 상향.") if c_dec < 8.0 else (f"{c_p}W", "내실 다지기.")
         
         st.markdown(f'<p class="section-title">Performance Briefing (Session {selected_session})</p>', unsafe_allow_html=True)
         ca, cb = st.columns(2)
@@ -116,7 +120,7 @@ with tab_analysis:
         fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ffffff', dash='dot')), secondary_y=True)
         st.plotly_chart(fig_corr, use_container_width=True)
 
-# --- [TAB 3: PROGRESSION] ---
+# --- [TAB 3: PROGRESSION (Restored)] ---
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">W/kg Track (Target 3.0)</p>', unsafe_allow_html=True)
@@ -127,8 +131,8 @@ with tab_trends:
         st.markdown('<p class="section-title">EF (Efficiency) Trend</p>', unsafe_allow_html=True)
         def get_ef(r):
             h = [int(x) for x in str(r['전체심박데이터']).split(',') if x.strip()]
-            main_sum = h[2]+h[3]+h[4]+h[5]+h[6]+h[7]+h[8]+h[9]+h[10]+h[11]+h[12]+h[13]+h[14]+h[15]+h[16]+h[17]
-            return r['본훈련파워'] / (main_sum / 16) if len(h) >= 18 else 0
+            main = h[2:-1]
+            return r['본훈련파워'] / (sum(main)/len(main)) if main else 0
         df['EF'] = df.apply(get_ef, axis=1)
         fig_ef = update_black(go.Figure())
         fig_ef.add_trace(go.Bar(x=df['회차'], y=df['EF'], name='Intensity', marker_color='rgba(0, 255, 204, 0.2)'))
