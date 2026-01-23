@@ -6,9 +6,9 @@ from plotly.subplots import make_subplots
 import numpy as np
 
 # 1. Page Configuration
-st.set_page_config(page_title="FTP 3.0 Project v9.991", layout="wide")
+st.set_page_config(page_title="FTP 3.0 Project v9.995", layout="wide")
 
-# 2. Styling (Perfect Black Theme & Compact GUI Restored)
+# 2. Styling (Perfect Black Theme & Compact GUI)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -52,26 +52,23 @@ def update_black(fig):
 
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION] (Z2 & SST Full UI) ---
+# --- [TAB 1: REGISTRATION] (5.8% Logic Fixed & SST Data Format Fixed) ---
 with tab_entry:
-    st.markdown('<p class="section-title">Workout Mode Select</p>', unsafe_allow_html=True)
     w_mode = st.radio("TYPE", ["ZONE 2", "SST"], horizontal=True)
-    c1, c2 = st.columns([1, 1])
+    c1, c2 = st.columns(2)
     f_date, f_session = c1.date_input("Date"), c2.number_input("No.", value=int(df["회차"].max()+1) if not df.empty else 1)
     
     if w_mode == "ZONE 2":
-        st.markdown('<p class="section-title">Zone 2 Parameters</p>', unsafe_allow_html=True)
         r = st.columns(3)
         f_wp, f_mp, f_cp = r[0].number_input("WU (W)", 97), r[1].number_input("Target (W)", 145), r[2].number_input("CD (W)", 90)
         f_main_dur = st.slider("Main Set (min)", 15, 180, 75, step=15)
         f_total_dur = 10 + f_main_dur + 5
-        f_detail = f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"
+        f_detail = f"Z2,{f_wp},{f_mp},{f_cp},75,0" # Format match
     else:
-        st.markdown('<p class="section-title">SST Interval Parameters</p>', unsafe_allow_html=True)
         r1 = st.columns(3)
-        f_sst_p, f_sst_t, f_sst_sets = r1[0].number_input("Work Power(W)", 185), r1[1].number_input("Work Time(m)", 15), r1[2].number_input("Sets", 2)
+        f_sst_p, f_sst_t, f_sst_sets = r1[0].number_input("Work(W)", 185), r1[1].number_input("Time(m)", 15), r1[2].number_input("Sets", 2)
         r2 = st.columns(2)
-        f_sst_rec_p, f_sst_rec_t = r2[0].number_input("Rec Power(W)", 90), r2[1].number_input("Rec Time(m)", 5)
+        f_sst_rec_p, f_sst_rec_t = r2[0].number_input("Rec(W)", 90), r2[1].number_input("Time(m)", 5)
         f_total_dur = 10 + (f_sst_sets * (f_sst_t + f_sst_rec_t)) + 10
         f_mp = f_sst_p
         f_detail = f"SST,97,{f_sst_p},{f_sst_rec_p},{f_sst_sets},{f_sst_t},{f_sst_rec_t}"
@@ -88,40 +85,34 @@ with tab_entry:
                     hv = st.number_input(f"T+{idx*5}m", value=130, key=f"hr_{idx}")
                     hr_inputs.append(str(int(hv)))
     
-    if st.button("SUBMIT DATA"):
+    if st.button("SUBMIT"):
         h = [int(x) for x in hr_inputs]
-        main_hr = h[2:-1] 
-        ss_start = max(1, len(main_hr) // 10); ss_end = len(main_hr) - ss_start
-        steady_state_hr = main_hr[ss_start:ss_end]
-        mid = len(steady_state_hr) // 2
-        avg1, avg2 = sum(steady_state_hr[:mid])/mid, sum(steady_state_hr[mid:])/mid
+        # [5.8% MATHEMATICS] 본세션 16개 정확히 이등분
+        main_hr = h[2:18]
+        mid = len(main_hr) // 2
+        avg1, avg2 = sum(main_hr[:mid])/mid, sum(main_hr[mid:])/mid
         dec = round((( (f_mp/avg1) - (f_mp/avg2) ) / (f_mp/avg1)) * 100, 2)
         new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": f_mp, "본훈련시간": f_total_dur-15, "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f_detail}
         df = pd.concat([df, pd.DataFrame([new])], ignore_index=True); conn.update(data=df); st.cache_data.clear(); st.rerun()
 
-# --- [TAB 2: PERFORMANCE] (SST Logic Integrated) ---
+# --- [TAB 2: PERFORMANCE (Error Fixed)] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         time_x = [i*5 for i in range(len(hr_array))]
         c_p, c_dec, c_type = int(s_data['본훈련파워']), s_data['디커플링(%)'], s_data['훈련타입']
         
-        # [SST vs Z2 Coaching Logic]
-        if c_type == "SST":
-            n_pres, coach_msg = f"{c_p+5}W SST", "SST 완수 확인. 무조건 상향 원칙에 따라 +5W를 제안합니다."
-        else:
-            n_pres, coach_msg = (f"{c_p+5}W Z2", "8% 미만 성공! 즉시 상향.") if c_dec < 8.0 else (f"{c_p}W Z2", "내실 다지기.")
+        n_pres, coach_msg = (f"{c_p+5}W SST", "완수 확인. 상향.") if c_type == "SST" else ((f"{c_p+5}W Z2", "8% 미만 성공!") if c_dec < 8.0 else (f"{c_p}W Z2", "내실 다지기."))
 
-        st.markdown(f'<p class="section-title">{c_type} Performance Briefing</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-title">Performance Briefing</p>', unsafe_allow_html=True)
         ca, cb = st.columns(2)
-        with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">RESULT</span><p style="font-size:1.5rem; font-weight:600; margin:0;">{c_p}W ({c_dec}%)</p></div>', unsafe_allow_html=True)
-        with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00; margin:0;">{n_pres}</p><p>{coach_msg}</p></div>', unsafe_allow_html=True)
+        with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">RESULT</span><p style="font-size:1.5rem; font-weight:600;">{c_p}W ({c_dec}%)</p></div>', unsafe_allow_html=True)
+        with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00;">{n_pres}</p><p>{coach_msg}</p></div>', unsafe_allow_html=True)
 
         fig_corr = update_black(make_subplots(specs=[[{"secondary_y": True}]]))
-        # Power Profile 시각화 로직
         p_raw = str(s_data['파워데이터상세']).split(',')
-        if p_raw[0] == "SST":
-            wu_p, work_p, rec_p, sets, work_t, rec_t = [float(x) for x in p_raw[1:]]
+        if p_raw[0] == "SST" and len(p_raw) >= 7: # Safety Check
+            wu_p, work_p, rec_p, sets, work_t, rec_t = [float(x) for x in p_raw[1:7]]
             p_y = [wu_p if t < 10 else (work_p if (t-10)%(work_t+rec_t) < work_t else rec_p) if t < 10 + sets*(work_t+rec_t) else 80 for t in time_x]
         else: p_y = [c_p if 10 <= t <= time_x[-1]-5 else 97 for t in time_x]
         
@@ -132,7 +123,7 @@ with tab_analysis:
 # --- [TAB 3: PROGRESSION] ---
 with tab_trends:
     if not df.empty:
-        st.markdown('<p class="section-title">W/kg Growth Track (Target 3.0)</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-title">W/kg Track (Target 3.0)</p>', unsafe_allow_html=True)
         fig_w = update_black(go.Figure(go.Scatter(x=df['회차'], y=df['본훈련파워']/85, mode='lines+markers', line=dict(color='#FF4D00', width=3), fill='tozeroy')))
         fig_w.add_hline(y=3.0, line_dash="dash", line_color="white", annotation_text="Goal 3.0")
         st.plotly_chart(fig_w, use_container_width=True)
@@ -140,7 +131,7 @@ with tab_trends:
         st.markdown('<p class="section-title">EF (Efficiency) Trend</p>', unsafe_allow_html=True)
         def get_ef(r):
             h = [int(x) for x in str(r['전체심박데이터']).split(',') if x.strip()]
-            main = h[2:-1]
+            main = h[2:18]
             return r['본훈련파워'] / (sum(main)/len(main)) if main else 0
         df['EF'] = df.apply(get_ef, axis=1)
         fig_ef = update_black(go.Figure())
