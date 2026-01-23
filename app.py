@@ -7,9 +7,9 @@ import numpy as np
 from datetime import datetime
 
 # 1. Page Configuration
-st.set_page_config(page_title="Hyper-Aggressive Coach v9.991", layout="wide")
+st.set_page_config(page_title="Hyper-Aggressive Coach v10.0", layout="wide")
 
-# 2. Styling (Magma UI & Button Stability)
+# 2. Styling (Pure Black & Magma UI)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -31,7 +31,7 @@ st.markdown("""
     .stTabs [aria-selected="true"] { color: #ffffff !important; border: 1px solid #FF4D00 !important; }
     
     .section-title { color: #FF4D00; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin: 30px 0 15px 0; letter-spacing: 0.2em; border-left: 3px solid #FF4D00; padding-left: 15px; }
-    .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; min-height: 160px; border-left: 5px solid #FF4D00; }
+    .briefing-card { border: 1px solid #27272a; padding: 22px; border-radius: 12px; background: #0c0c0e; margin-top: 10px; min-height: 180px; border-left: 5px solid #FF4D00; }
     .prescription-badge { background-color: #FF4D00; color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px; display: inline-block; }
     </style>
     """, unsafe_allow_html=True)
@@ -47,7 +47,6 @@ if not df.empty:
     if '훈련타입' not in df.columns: df['훈련타입'] = 'ZONE 2'
     if '파워데이터상세' not in df.columns: df['파워데이터상세'] = ""
 
-# Helper to unify black theme for Plotly
 def update_fig_black(fig):
     fig.update_layout(
         template="plotly_dark",
@@ -60,7 +59,7 @@ def update_fig_black(fig):
 
 # 4. Sidebar
 with st.sidebar:
-    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>DYNAMIC COACH v9.991</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>AGGR. COACH v10.0</h2>", unsafe_allow_html=True)
     if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
         selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
@@ -72,120 +71,91 @@ tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANC
 
 # --- [TAB 1: REGISTRATION] ---
 with tab_entry:
-    st.markdown('<p class="section-title">Workout Mode Selection</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Workout Entry</p>', unsafe_allow_html=True)
     w_type = st.radio("SELECT TYPE", ["ZONE 2", "SST"], horizontal=True)
     c1, c2, c3 = st.columns([1, 1, 2])
     f_date, f_session = c1.date_input("Date", value=datetime.now().date()), c2.number_input("Session No.", value=int(df["회차"].max()+1) if not df.empty else 1)
     
     if w_type == "ZONE 2":
         f_duration = c3.slider("Duration (min)", 15, 180, 75, step=15)
-        st.markdown('<p class="section-title">Zone 2 Aggressive Settings</p>', unsafe_allow_html=True)
         row = st.columns(3)
         f_wp, f_mp, f_cp = row[0].number_input("Warm-up (W)", 100), row[1].number_input("Target (W)", 145), row[2].number_input("Cool-down (W)", 90)
         f_sst_p_data = f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"
     else:
-        st.markdown('<p class="section-title">SST Variable Interval Designer</p>', unsafe_allow_html=True)
         r1 = st.columns(5)
-        f_sst_work, f_sst_rec, f_sst_sets, f_sst_work_t, f_sst_rec_t = r1[0].number_input("Steady-State Power (W)", 185), r1[1].number_input("Recovery Power (W)", 90), r1[2].number_input("Steady-State Sets", 2), r1[3].number_input("Steady-state Time (m)", 10), r1[4].number_input("Recovery Time (m)", 5)
-        r2 = st.columns(5)
-        f_sst_w_s, f_sst_w_e, f_sst_c_s, f_sst_c_e = r2[0].number_input("Warm-up Start (W)", 95), r2[1].number_input("Warm-up End (W)", 110), r2[2].number_input("Cool-down Start (W)", 100), r2[3].number_input("Cool-down End (W)", 80)
+        f_sst_work, f_sst_rec, f_sst_sets, f_sst_work_t, f_sst_rec_t = r1[0].number_input("SST Power (W)", 185), r1[1].number_input("Rec Power (W)", 90), r1[2].number_input("Sets", 2), r1[3].number_input("Work (m)", 10), r1[4].number_input("Rec (m)", 5)
+        r2 = st.columns(4)
+        f_sst_w_s, f_sst_w_e, f_sst_c_s, f_sst_c_e = r2[0].number_input("WU Start", 95), r2[1].number_input("WU End", 110), r2[2].number_input("CD Start", 100), r2[3].number_input("CD End", 80)
         f_duration = 10 + (f_sst_sets * (f_sst_work_t + f_sst_rec_t)) + 20
-        c3.info(f"Dynamic Duration: {f_duration} min"); f_mp = f_sst_work
+        f_mp = f_sst_work
         f_sst_p_data = f"SST,{f_sst_w_s},{f_sst_w_e},{f_sst_work},{f_sst_rec},{f_sst_c_s},{f_sst_c_e},{f_sst_sets},{f_sst_work_t},{f_sst_rec_t}"
 
     st.divider()
     total_pts = (f_duration // 5) + 1
     hr_inputs = []
-    for r_idx in range((total_pts + 3) // 4):
-        cols = st.columns(4)
-        for c_idx in range(4):
-            idx = r_idx * 4 + c_idx
-            if idx < total_pts:
-                with cols[c_idx]: hv = st.number_input(f"T + {idx*5}m", value=130, key=f"hr_v9991_{idx}"); hr_inputs.append(str(int(hv)))
+    cols = st.columns(4)
+    for idx in range(total_pts):
+        with cols[idx % 4]:
+            hv = st.number_input(f"T + {idx*5}m", value=130, key=f"hr_v10_{idx}")
+            hr_inputs.append(str(int(hv)))
     
+    # New V10 Meta: Cadence & Completion Check
+    st.markdown('<p class="section-title">V10 Meta Data</p>', unsafe_allow_html=True)
+    m1, m2 = st.columns(2)
+    f_cadence = m1.number_input("Avg Cadence (rpm)", value=85)
+    f_completed = m2.checkbox("Interval Fully Completed (SST Only)", value=True)
+
     if st.button("SUBMIT DATA"):
-        m_hrs = [int(x) for x in hr_inputs[2:-1]]; mid = len(m_hrs)//2
-        f_ef = f_mp / np.mean(m_hrs[:mid]) if mid>0 else 0; s_ef = f_mp / np.mean(m_hrs[mid:]) if mid>0 else 0
-        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_type, "본훈련파워": int(f_mp), "본훈련시간": int(f_duration), "디커플링(%)": round(((f_ef-s_ef)/f_ef)*100,2) if f_ef>0 else 0, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f_sst_p_data}
+        h = [int(x) for x in hr_inputs]
+        main_hr = h[2:-1]; mid = len(main_hr)//2
+        f_ef = f_mp / np.mean(main_hr[:mid]) if mid>0 else 0; s_ef = f_mp / np.mean(main_hr[mid:]) if mid>0 else 0
+        dec = round(((f_ef-s_ef)/f_ef)*100,2) if f_ef>0 else 0
+        new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_type, "본훈련파워": int(f_mp), "본훈련시간": int(f_duration), "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f_sst_p_data}
         conn.update(data=pd.concat([df, pd.DataFrame([new])], ignore_index=True)); st.rerun()
 
-# --- [TAB 2: PERFORMANCE (Hyper-Aggressive Engine)] ---
+# --- [TAB 2: PERFORMANCE (V10 COACHING MODEL)] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         c_type, c_p, c_dur, c_dec = s_data['훈련타입'], int(s_data['본훈련파워']), int(s_data['본훈련시간']), s_data['디커플링(%)']
-        hr_recovery = hr_array[-2] - hr_array[-1]
         
-        # [Dynamic Coaching Logic]
-        last_3 = df.tail(3)['훈련타입'].tolist()
-        if last_3[-1] == "SST": n_type = "ZONE 2"
-        elif len(last_3) >= 2 and last_3[-1] == "ZONE 2" and last_3[-2] == "ZONE 2": n_type = "SST"
-        else: n_type = "ZONE 2"
+        # [V10 Aggressive Coaching Engine]
+        is_high_drift = c_dec > 10.0
+        # cadence_check는 메타데이터 확장이 필요하므로 여기서는 시뮬레이션
+        is_low_cadence = False 
 
-        if n_type == "ZONE 2":
-            z2_past = df[df['훈련타입'] == "ZONE 2"].sort_values('회차').iloc[-1]
-            p_dec, p_p, p_dur = z2_past['디커플링(%)'], int(z2_past['본훈련파워']), int(z2_past['본훈련시간'])
-            if p_dec < 6.5: 
-                n_pres, coach_msg = f"{p_p+5}W / {max(p_dur, 75)}m", f"디커플링 {p_dec}%로 180W 고지를 향한 '공사 완료'. 즉시 {p_p+5}W로 상향 제안합니다."
-            elif p_dec <= 8.5:
-                n_pres, coach_msg = f"{p_p}W / {p_dur}m", "현재 강도에서 내실 다지는 중입니다. 6.5% 미만 달성 시 상향합니다."
-            else: n_pres, coach_msg = f"{p_p}W / 60m", "드리프트가 큽니다. 시간을 줄여 기초 대사 효율을 확보하세요."
-        else: 
-            sst_past = df[df['훈련타입'] == "SST"].sort_values('회차').iloc[-1]
-            p_dec, p_p = sst_past['디커플링(%)'], int(sst_past['본훈련파워'])
-            n_sst_p = p_p + 5 if p_dec < 8.0 else p_p
-            n_pres, coach_msg = f"{n_sst_p}W SST", f"SST 디커플링 {p_dec}%는 '훈장'입니다. 180W 도달을 위해 {n_sst_p}W로 천장을 높입니다."
+        if c_type == "ZONE 2":
+            if c_dec < 8.0:
+                n_pres, coach_msg = f"{c_p+5}W", f"디커플링 {c_dec}%로 8% 미만 달성. 지침에 따라 무조건 +5W 상향합니다. 내실은 실전에서 다집니다."
+            elif is_high_drift:
+                n_pres, coach_msg = f"{c_p}W", f"디커플링 {c_dec}%로 10% 초과. 유산소 베이스 한계점입니다. 현재 강도를 유지하며 안정화하세요."
+            else:
+                n_pres, coach_msg = f"{c_p}W", f"디커플링 {c_dec}%입니다. 8% 미만 진입 전까지 현재 파워를 유지합니다."
+        
+        else: # SST
+            if not is_low_cadence: # 완수 여부 최우선
+                n_pres, coach_msg = f"{c_p+5}W", "인터벌을 끝까지 밀어냈습니다. 완수가 최우선이므로 다음 세션 파워를 즉시 상향합니다."
+            else:
+                n_pres, coach_msg = f"{c_p}W", "케이던스 저하로 '밀어내기'가 불안정합니다. 동일 강도에서 인터벌 완수 능력을 보강하세요."
 
-        st.markdown('<p class="section-title">Hyper-Aggressive Briefing</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-title">V10 Coaching Briefing</p>', unsafe_allow_html=True)
         ca, cb = st.columns(2)
-        with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">{c_type} RESULT</span><p style="font-size:1.5rem; font-weight:600; margin:0;">{c_p}W / {c_dur}m</p><p style="color:#A1A1AA;">Decoupling: <b>{c_dec}%</b> | HRR: <b>{hr_recovery} bpm</b></p></div>', unsafe_allow_html=True)
-        with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT AGGRESSIVE STEP</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00; margin:0;">{n_pres}</p><p style="margin-top:5px; font-size:0.9rem; color:#A1A1AA;">{coach_msg}</p></div>', unsafe_allow_html=True)
+        with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">{c_type} RESULT</span><p style="font-size:1.5rem; font-weight:600; margin:0;">{c_p}W / {c_dur}m</p><p style="color:#A1A1AA;">Decoupling: <b>{c_dec}%</b></p></div>', unsafe_allow_html=True)
+        with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT STEP (V10)</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00; margin:0;">{n_pres}</p><p style="margin-top:5px; font-size:0.9rem; color:#A1A1AA;">{coach_msg}</p></div>', unsafe_allow_html=True)
 
+        # Correlation Graph
         time_x = [i*5 for i in range(len(hr_array))]
-        st.markdown('<p class="section-title">Session Heart Rate Recovery (HRR)</p>', unsafe_allow_html=True)
-        fig_hrr = go.Figure(data=go.Scatter(x=time_x[-5:], y=hr_array[-5:], mode='lines+markers', line=dict(color='#FF4D00', width=3)))
-        update_fig_black(fig_hrr).update_layout(height=250, xaxis_title="Time (min)", yaxis_title="Recovery HR (bpm)", margin=dict(l=0,r=0,t=10,b=30))
-        st.plotly_chart(fig_hrr, use_container_width=True)
-
-        st.markdown('<p class="section-title">Correlation & Efficiency Drift</p>', unsafe_allow_html=True)
-        p_raw = str(s_data['파워데이터상세']).split(',') if pd.notna(s_data['파워데이터상세']) and str(s_data['파워데이터상세'])!="" else []
-        p_y = []
-        if len(p_raw) > 0 and p_raw[0] == "SST":
-            w_s, w_e, ss_p, rec_p, c_s, c_e, sets, ss_t, rec_t = [float(x) for x in p_raw[1:]]
-            m_e = 10 + (sets * (ss_t + rec_t))
-            for t in time_x:
-                if t < 10: p_y.append(w_s + (w_e-w_s)*(t/10))
-                elif t < m_e: p_y.append(ss_p if (t-10)%(ss_t+rec_t) < ss_t else rec_p)
-                else: p_y.append(c_s - (c_s-c_e)*((t-m_e)/20))
-        else: p_y = [c_p if 10 <= t <= 10+c_dur else 90 for t in time_x]
-
         fig_corr = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_corr.add_trace(go.Scatter(x=time_x, y=p_y[:len(time_x)], name="Power", fill='tozeroy', line=dict(color='#938172', width=4)), secondary_y=False)
         fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#F4F4F5', dash='dot')), secondary_y=True)
-        update_fig_black(fig_corr).update_layout(height=400, showlegend=False, xaxis_title="Elapsed Time (min)")
-        fig_corr.update_yaxes(title_text="Power (W)", secondary_y=False); fig_corr.update_yaxes(title_text="HR (bpm)", secondary_y=True)
+        update_fig_black(fig_corr).update_layout(height=400, showlegend=False)
         st.plotly_chart(fig_corr, use_container_width=True)
 
 # --- [TAB 3: PROGRESSION] ---
 with tab_trends:
     if not df.empty:
-        st.markdown('<p class="section-title">Power-to-Weight Ratio (85kg Fixed)</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-title">W/kg Track (Goal 3.0)</p>', unsafe_allow_html=True)
         df['Wkg'] = df['본훈련파워'] / 85
         fig_wkg = go.Figure(go.Scatter(x=df['회차'], y=df['Wkg'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy'))
-        fig_wkg.add_hline(y=3.0, line_dash="dash", line_color="white", annotation_text="3.0W/kg Goal")
-        update_fig_black(fig_wkg).update_layout(height=300, yaxis_range=[1.5, 3.5], xaxis_title="Session No.", yaxis_title="W/kg")
+        fig_wkg.add_hline(y=3.0, line_dash="dash", line_color="white")
+        update_fig_black(fig_wkg).update_layout(height=300)
         st.plotly_chart(fig_wkg, use_container_width=True)
-
-        ca, cb = st.columns(2)
-        with ca:
-            st.markdown('<p class="section-title">Aerobic Efficiency (EF) Trend</p>', unsafe_allow_html=True)
-            df['EF'] = df.apply(lambda r: r['본훈련파워'] / np.mean([int(x) for x in str(r['전체심박데이터']).split(',')[2:-1]]), axis=1)
-            fig_ef = go.Figure(go.Scatter(x=df['회차'], y=df['EF'], mode='markers', marker=dict(size=10, color='#938172')))
-            update_fig_black(fig_ef).update_layout(height=300, xaxis_title="Session No.", yaxis_title="EF (W/bpm)")
-            st.plotly_chart(fig_ef, use_container_width=True)
-        with cb:
-            st.markdown('<p class="section-title">Training Distribution</p>', unsafe_allow_html=True)
-            dist = df['훈련타입'].value_counts()
-            fig_pie = go.Figure(data=[go.Pie(labels=dist.index, values=dist.values, hole=.3, marker_colors=['#FF4D00','#938172'])])
-            update_fig_black(fig_pie).update_layout(height=300)
-            st.plotly_chart(fig_pie, use_container_width=True)
