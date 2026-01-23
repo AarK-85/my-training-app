@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="FTP 3.0 Project v9.991", layout="wide")
 
-# 2. Styling (Perfect Black Theme & Restored Compact GUI)
+# 2. Styling (Perfect Black Theme & Compact GUI & Fixed Box Size)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -40,7 +40,7 @@ if not df.empty:
 
 # 4. Sidebar Archive
 with st.sidebar:
-    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>3.0W/kg PROJECT</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>PHASE 2 COACH</h2>", unsafe_allow_html=True)
     if not df.empty:
         sessions = sorted(df["회차"].unique().tolist(), reverse=True)
         selected_session = st.selectbox("SESSION ARCHIVE", sessions, index=0)
@@ -54,9 +54,9 @@ def update_black(fig):
 
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION] (The "5.8%" Mathematics Fixed) ---
+# --- [TAB 1: REGISTRATION] (The 5.8% Mathematics) ---
 with tab_entry:
-    st.markdown('<p class="section-title">New Workout Entry</p>', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">Workout Entry</p>', unsafe_allow_html=True)
     w_mode = st.radio("SELECT TYPE", ["ZONE 2", "SST"], horizontal=True)
     c1, c2, c3 = st.columns([1, 1, 2])
     f_date, f_session = c1.date_input("Date"), c2.number_input("No.", value=int(df["회차"].max()+1) if not df.empty else 1)
@@ -71,7 +71,6 @@ with tab_entry:
     total_pts = (f_total_dur // 5) + 1
     hr_inputs = []
     st.markdown(f'<p class="section-title">HR Input ({f_total_dur}m)</p>', unsafe_allow_html=True)
-    # Compact 4-column GUI Restored
     for r_idx in range((total_pts + 3) // 4):
         cols = st.columns(4)
         for c_idx in range(4):
@@ -82,33 +81,36 @@ with tab_entry:
                     hr_inputs.append(str(int(hv)))
     
     if st.button("SUBMIT"):
+        # [THE 5.8% VERIFIED LOGIC]
         all_hr = [int(x) for x in hr_inputs]
-        # [THE 5.8% PRECISION LOGIC]
-        # T+10(idx 2) ~ T+85(idx 17) 정확히 16개 포인트 추출하여 8개씩 이등분
-        main_hr = all_hr[2:18] 
-        first_half = main_hr[:8]
-        second_half = main_hr[8:]
+        # 90분 데이터 기준: T+10(idx 2) ~ T+85(idx 17) -> 총 16개 포인트
+        # 짝수 개이므로 정확히 8개 / 8개 분할
+        main_hr_block = all_hr[2:18] 
+        first_8 = main_hr_block[:8]
+        last_8 = main_hr_block[8:]
         
-        ef1 = f_mp / np.mean(first_half)
-        ef2 = f_mp / np.mean(second_half)
+        avg_hr1 = sum(first_8) / 8
+        avg_hr2 = sum(last_8) / 8
+        
+        ef1 = f_mp / avg_hr1
+        ef2 = f_mp / avg_hr2
         dec = round(((ef1 - ef2) / ef1) * 100, 2)
         
         new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"}
         df = pd.concat([df, pd.DataFrame([new])], ignore_index=True); conn.update(data=df); st.cache_data.clear(); st.rerun()
 
-# --- [TAB 2: PERFORMANCE (Full Restore)] ---
+# --- [TAB 2: PERFORMANCE (Restored)] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
         time_x = [i*5 for i in range(len(hr_array))]
         c_p, c_dec, c_dur = int(s_data['본훈련파워']), s_data['디커플링(%)'], int(s_data['본훈련시간'])
-
         n_pres, coach_msg = (f"{c_p+5}W", "8% 미만 성공! 즉시 상향.") if c_dec < 8.0 else (f"{c_p}W", "내실 다지기.")
         
         st.markdown(f'<p class="section-title">Performance Briefing (Session {selected_session})</p>', unsafe_allow_html=True)
         ca, cb = st.columns(2)
-        with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">RESULT</span><p style="font-size:1.5rem; font-weight:600; margin:0;">{c_p}W ({c_dec}%)</p><p style="color:#A1A1AA; font-size:0.8rem;">Duration: {c_dur}m</p></div>', unsafe_allow_html=True)
-        with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00; margin:0;">{n_pres}</p><p style="font-size:0.8rem;">{coach_msg}</p></div>', unsafe_allow_html=True)
+        with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">RESULT</span><p style="font-size:1.5rem; font-weight:600; margin:0;">{c_p}W ({c_dec}%)</p></div>', unsafe_allow_html=True)
+        with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00; margin:0;">{n_pres}</p><p>{coach_msg}</p></div>', unsafe_allow_html=True)
 
         fig_corr = update_black(make_subplots(specs=[[{"secondary_y": True}]]))
         p_y = [c_p if 10 <= t <= 10+c_dur else 97 for t in time_x]
@@ -116,7 +118,7 @@ with tab_analysis:
         fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ffffff', dash='dot')), secondary_y=True)
         st.plotly_chart(fig_corr, use_container_width=True)
 
-# --- [TAB 3: PROGRESSION (Full Restore)] ---
+# --- [TAB 3: PROGRESSION (EF & W/kg Restoration)] ---
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">W/kg Track (Target 3.0)</p>', unsafe_allow_html=True)
@@ -126,9 +128,8 @@ with tab_trends:
 
         st.markdown('<p class="section-title">EF (Efficiency) Trend</p>', unsafe_allow_html=True)
         def get_ef(r):
-            hrs = [int(x) for x in str(r['전체심박데이터']).split(',') if x.strip()]
-            main = hrs[2:18]
-            return r['본훈련파워'] / np.mean(main) if main else 0
+            hrs = [int(x) for x in str(r['전체심박데이터']).split(',') if x.strip()][2:18]
+            return r['본훈련파워'] / (sum(hrs)/len(hrs)) if hrs else 0
         df['EF'] = df.apply(get_ef, axis=1)
         fig_ef = update_black(go.Figure())
         fig_ef.add_trace(go.Bar(x=df['회차'], y=df['EF'], name='Intensity', marker_color='rgba(0, 255, 204, 0.2)'))
