@@ -47,6 +47,17 @@ if not df.empty:
     if '훈련타입' not in df.columns: df['훈련타입'] = 'ZONE 2'
     if '파워데이터상세' not in df.columns: df['파워데이터상세'] = ""
 
+# Helper to unify black theme for Plotly
+def update_fig_black(fig):
+    fig.update_layout(
+        template="plotly_dark",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(gridcolor='#27272a', zerolinecolor='#27272a'),
+        yaxis=dict(gridcolor='#27272a', zerolinecolor='#27272a')
+    )
+    return fig
+
 # 4. Sidebar
 with st.sidebar:
     st.markdown("<h2 style='color:#FF4D00; letter-spacing:0.1em;'>DYNAMIC COACH v9.991</h2>", unsafe_allow_html=True)
@@ -114,12 +125,12 @@ with tab_analysis:
         if n_type == "ZONE 2":
             z2_past = df[df['훈련타입'] == "ZONE 2"].sort_values('회차').iloc[-1]
             p_dec, p_p, p_dur = z2_past['디커플링(%)'], int(z2_past['본훈련파워']), int(z2_past['본훈련시간'])
-            if p_dec < 6.5: # 공격적 상향 임계값
+            if p_dec < 6.5: 
                 n_pres, coach_msg = f"{p_p+5}W / {max(p_dur, 75)}m", f"디커플링 {p_dec}%로 180W 고지를 향한 '공사 완료'. 즉시 {p_p+5}W로 상향 제안합니다."
             elif p_dec <= 8.5:
-                n_pres, coach_msg = f"{p_p}W / {p_dur}m", "현재 강도에서 내실을 다지는 중입니다. 6.5% 미만 달성 시 상향합니다."
+                n_pres, coach_msg = f"{p_p}W / {p_dur}m", "현재 강도에서 내실 다지는 중입니다. 6.5% 미만 달성 시 상향합니다."
             else: n_pres, coach_msg = f"{p_p}W / 60m", "드리프트가 큽니다. 시간을 줄여 기초 대사 효율을 확보하세요."
-        else: # SST
+        else: 
             sst_past = df[df['훈련타입'] == "SST"].sort_values('회차').iloc[-1]
             p_dec, p_p = sst_past['디커플링(%)'], int(sst_past['본훈련파워'])
             n_sst_p = p_p + 5 if p_dec < 8.0 else p_p
@@ -130,11 +141,10 @@ with tab_analysis:
         with ca: st.markdown(f'<div class="briefing-card"><span class="prescription-badge">{c_type} RESULT</span><p style="font-size:1.5rem; font-weight:600; margin:0;">{c_p}W / {c_dur}m</p><p style="color:#A1A1AA;">Decoupling: <b>{c_dec}%</b> | HRR: <b>{hr_recovery} bpm</b></p></div>', unsafe_allow_html=True)
         with cb: st.markdown(f'<div class="briefing-card" style="border-color:#FF4D00;"><span class="prescription-badge">NEXT AGGRESSIVE STEP</span><p style="font-size:1.5rem; font-weight:600; color:#FF4D00; margin:0;">{n_pres}</p><p style="margin-top:5px; font-size:0.9rem; color:#A1A1AA;">{coach_msg}</p></div>', unsafe_allow_html=True)
 
-        # Graphs Reconstruction (v9.91 기반)
         time_x = [i*5 for i in range(len(hr_array))]
         st.markdown('<p class="section-title">Session Heart Rate Recovery (HRR)</p>', unsafe_allow_html=True)
         fig_hrr = go.Figure(data=go.Scatter(x=time_x[-5:], y=hr_array[-5:], mode='lines+markers', line=dict(color='#FF4D00', width=3)))
-        fig_hrr.update_layout(template="plotly_dark", height=250, xaxis_title="Time (min)", yaxis_title="Recovery HR (bpm)", margin=dict(l=0,r=0,t=10,b=30))
+        update_fig_black(fig_hrr).update_layout(height=250, xaxis_title="Time (min)", yaxis_title="Recovery HR (bpm)", margin=dict(l=0,r=0,t=10,b=30))
         st.plotly_chart(fig_hrr, use_container_width=True)
 
         st.markdown('<p class="section-title">Correlation & Efficiency Drift</p>', unsafe_allow_html=True)
@@ -152,7 +162,7 @@ with tab_analysis:
         fig_corr = make_subplots(specs=[[{"secondary_y": True}]])
         fig_corr.add_trace(go.Scatter(x=time_x, y=p_y[:len(time_x)], name="Power", fill='tozeroy', line=dict(color='#938172', width=4)), secondary_y=False)
         fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#F4F4F5', dash='dot')), secondary_y=True)
-        fig_corr.update_layout(template="plotly_dark", height=400, showlegend=False, xaxis_title="Elapsed Time (min)")
+        update_fig_black(fig_corr).update_layout(height=400, showlegend=False, xaxis_title="Elapsed Time (min)")
         fig_corr.update_yaxes(title_text="Power (W)", secondary_y=False); fig_corr.update_yaxes(title_text="HR (bpm)", secondary_y=True)
         st.plotly_chart(fig_corr, use_container_width=True)
 
@@ -163,7 +173,7 @@ with tab_trends:
         df['Wkg'] = df['본훈련파워'] / 85
         fig_wkg = go.Figure(go.Scatter(x=df['회차'], y=df['Wkg'], mode='lines+markers', line=dict(color='#FF4D00', width=2), fill='tozeroy'))
         fig_wkg.add_hline(y=3.0, line_dash="dash", line_color="white", annotation_text="3.0W/kg Goal")
-        fig_wkg.update_layout(template="plotly_dark", height=300, yaxis_range=[1.5, 3.5], xaxis_title="Session No.", yaxis_title="W/kg")
+        update_fig_black(fig_wkg).update_layout(height=300, yaxis_range=[1.5, 3.5], xaxis_title="Session No.", yaxis_title="W/kg")
         st.plotly_chart(fig_wkg, use_container_width=True)
 
         ca, cb = st.columns(2)
@@ -171,11 +181,11 @@ with tab_trends:
             st.markdown('<p class="section-title">Aerobic Efficiency (EF) Trend</p>', unsafe_allow_html=True)
             df['EF'] = df.apply(lambda r: r['본훈련파워'] / np.mean([int(x) for x in str(r['전체심박데이터']).split(',')[2:-1]]), axis=1)
             fig_ef = go.Figure(go.Scatter(x=df['회차'], y=df['EF'], mode='markers', marker=dict(size=10, color='#938172')))
-            fig_ef.update_layout(template="plotly_dark", height=300, xaxis_title="Session No.", yaxis_title="EF (W/bpm)")
+            update_fig_black(fig_ef).update_layout(height=300, xaxis_title="Session No.", yaxis_title="EF (W/bpm)")
             st.plotly_chart(fig_ef, use_container_width=True)
         with cb:
             st.markdown('<p class="section-title">Training Distribution</p>', unsafe_allow_html=True)
             dist = df['훈련타입'].value_counts()
             fig_pie = go.Figure(data=[go.Pie(labels=dist.index, values=dist.values, hole=.3, marker_colors=['#FF4D00','#938172'])])
-            fig_pie.update_layout(template="plotly_dark", height=300)
+            update_fig_black(fig_pie).update_layout(height=300)
             st.plotly_chart(fig_pie, use_container_width=True)
