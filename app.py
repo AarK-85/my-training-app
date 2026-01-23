@@ -9,7 +9,7 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="Hyper-Aggressive Coach v9.991", layout="wide")
 
-# 2. Styling (Perfect Black Theme & Compact GUI & Fixed Box Size)
+# 2. Styling (Perfect Black Theme & Restored Compact GUI)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Lexend:wght@500&display=swap');
@@ -54,7 +54,7 @@ def update_black(fig):
 
 tab_entry, tab_analysis, tab_trends = st.tabs(["[ REGISTRATION ]", "[ PERFORMANCE ]", "[ PROGRESSION ]"])
 
-# --- [TAB 1: REGISTRATION] (The "5.8%" Mathematics) ---
+# --- [TAB 1: REGISTRATION] (The 5.8% Logic) ---
 with tab_entry:
     st.markdown('<p class="section-title">Workout Entry</p>', unsafe_allow_html=True)
     w_mode = st.radio("SELECT TYPE", ["ZONE 2", "SST"], horizontal=True)
@@ -82,21 +82,17 @@ with tab_entry:
     
     if st.button("SUBMIT"):
         all_hr = [int(x) for x in hr_inputs]
-        # [THE 5.8% PRECISION LOGIC]
-        # 10분 데이터(idx 2) ~ 85분 데이터(idx 17) 정확히 16개 추출
+        # [5.8% 고정 로직] 90분 기준 T+10(idx 2) ~ T+85(idx 17) 정확히 16개 포인트
         main_hr = all_hr[2:18] 
         split = len(main_hr) // 2
-        first_half_avg = np.mean(main_hr[:split])
-        second_half_avg = np.mean(main_hr[split:])
-        
-        ef1 = f_mp / first_half_avg
-        ef2 = f_mp / second_half_avg
+        ef1 = f_mp / np.mean(main_hr[:split])
+        ef2 = f_mp / np.mean(main_hr[split:])
         dec = round(((ef1 - ef2) / ef1) * 100, 2)
         
         new = {"날짜": f_date.strftime("%Y-%m-%d"), "회차": int(f_session), "훈련타입": w_mode, "본훈련파워": int(f_mp), "본훈련시간": int(f_total_dur-15), "디커플링(%)": dec, "전체심박데이터": ", ".join(hr_inputs), "파워데이터상세": f"Z2,{f_wp},{f_mp},{f_cp},0,0,0,0,0"}
         df = pd.concat([df, pd.DataFrame([new])], ignore_index=True); conn.update(data=df); st.cache_data.clear(); st.rerun()
 
-# --- [TAB 2: PERFORMANCE (Restored)] ---
+# --- [TAB 2: PERFORMANCE (Full Restore)] ---
 with tab_analysis:
     if s_data is not None:
         hr_array = [int(float(x)) for x in str(s_data['전체심박데이터']).split(',') if x.strip()]
@@ -115,7 +111,7 @@ with tab_analysis:
         fig_corr.add_trace(go.Scatter(x=time_x, y=hr_array, name="HR", line=dict(color='#ffffff', dash='dot')), secondary_y=True)
         st.plotly_chart(fig_corr, use_container_width=True)
 
-# --- [TAB 3: PROGRESSION (Restored)] ---
+# --- [TAB 3: PROGRESSION (Full Restore)] ---
 with tab_trends:
     if not df.empty:
         st.markdown('<p class="section-title">W/kg Track (Target 3.0)</p>', unsafe_allow_html=True)
@@ -125,9 +121,8 @@ with tab_trends:
 
         st.markdown('<p class="section-title">EF (Efficiency) Trend</p>', unsafe_allow_html=True)
         def get_ef(r):
-            hrs = [int(x) for x in str(r['전체심박데이터']).split(',') if x.strip()]
-            main = hrs[2:18]
-            return r['본훈련파워'] / np.mean(main) if main else 0
+            hrs = [int(x) for x in str(r['전체심박데이터']).split(',') if x.strip()][2:18]
+            return r['본훈련파워'] / np.mean(hrs) if hrs else 0
         df['EF'] = df.apply(get_ef, axis=1)
         fig_ef = update_black(go.Figure())
         fig_ef.add_trace(go.Bar(x=df['회차'], y=df['EF'], name='Intensity', marker_color='rgba(0, 255, 204, 0.2)'))
